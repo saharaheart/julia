@@ -1,6 +1,6 @@
 # This file is a part of Julia. License is MIT: http://julialang.org/license
 
-# fft
+@testset "fft" begin
 a = rand(8) + im*rand(8)
 @test norm(ifft(fft(a)) - a) < 1e-8
 @test norm(ifft(fft(a,1),1) - a) < 1e-8
@@ -336,3 +336,4 @@ a = rand(5)
 a16 = convert(Vector{Float16}, a)
 @test  fft(a16) ==  fft(view(a16,:)) ==  fft(view(a16, 1:5)) ==  fft(view(a16, [1:5;]))
 @test rfft(a16) == rfft(view(a16,:)) == rfft(view(a16, 1:5)) == rfft(view(a16, [1:5;]))
+end

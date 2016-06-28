@@ -1,7 +1,5 @@
 # This file is a part of Julia. License is MIT: http://julialang.org/license
 
-using Base.Test
-
 @test issparse(sparse(ones(5,5)))
 @test !issparse(ones(5,5))
 @test Base.SparseArrays.indtype(sparse(ones(Int8,2),ones(Int8,2),rand(2))) == Int8

@@ -1,9 +1,6 @@
 # This file is a part of Julia. License is MIT: http://julialang.org/license
 
-# Test functionality of IntSet
-
-
-## IntSet
+@testset "intset" begin
 
 # Construction, collect
 data_in = (1,5,100)
@@ -135,3 +132,5 @@ pop!(j, 257)
 @test IntSet([1, 2, 4]) <= IntSet(1:10)
 @test IntSet([1, 2, 4]) <= IntSet([1, 2, 4])
 @test IntSet([]) <= IntSet([])
+
+end

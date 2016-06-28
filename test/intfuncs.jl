@@ -1,5 +1,6 @@
 # This file is a part of Julia. License is MIT: http://julialang.org/license
 
+@testset "intfuncs" begin
 # Int32 and Int64 take different code paths -- test both
 for T in (Int32, Int64)
     @test gcd(T(3)) === T(3)
@@ -155,3 +156,5 @@ end
 
 # issue #15911
 @inferred string(1)
+
+end
