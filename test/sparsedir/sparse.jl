@@ -459,8 +459,7 @@ end
 @test maximum(sparse(-ones(3,3))) == -1
 @test minimum(sparse(ones(3,3))) == 1
 
-# Test unary functions with specialized broadcast over SparseMatrixCSCs
-let
+@testset "Unary functions" begin
     A = sprand(5, 15, 0.5)
     C = A + im*A
     Afull = full(A)
