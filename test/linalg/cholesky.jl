@@ -1,6 +1,5 @@
 # This file is a part of Julia. License is MIT: http://julialang.org/license
 
-@testset "cholesky" begin
 debug = false
 
 using Base.LinAlg: BlasComplex, BlasFloat, BlasReal, QRPivoted
@@ -227,4 +226,3 @@ end
 @test_throws ArgumentError Base.LinAlg.cholfact!(randn(5,5),:U,Val{false})
 @test_throws ArgumentError cholfact(randn(5,5),:U,Val{false})
 
-end

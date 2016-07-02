@@ -1,6 +1,5 @@
 # This file is a part of Julia. License is MIT: http://julialang.org/license
 
-@testset "workspace" begin
 script = """
 # Issue #11948
 f(x) = x+1
@@ -16,6 +15,7 @@ show(io, Pair)
 """
 exename = Base.julia_cmd()
 run(`$exename --startup-file=no -e $script`)
+<<<<<<< ba9c684544c826ca26102cf0193cdc0dce913c5d
 
 # issue #17764
 script2 = """
@@ -25,4 +25,3 @@ type Foo end
 @assert Tuple{Type{LastMain.Foo}} !== Tuple{Type{Main.Foo}}
 """
 run(`$exename --startup-file=no -e $script2`)
-end

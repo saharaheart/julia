@@ -1,6 +1,5 @@
 # This file is a part of Julia. License is MIT: http://julialang.org/license
 
-@testset "arnoldi" begin
 debug = false
 
 debug && println("eigs")
@@ -238,6 +237,4 @@ let
     A = randn(n,n); A = A'A
     B = randn(n,k);  B = B*B'
     @test sort(eigs(A, B, nev = k, sigma = 1.0)[1]) ≈ sort(eigvals(A, B)[1:k])
-end
-
 end

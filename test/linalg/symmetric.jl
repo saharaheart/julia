@@ -1,6 +1,5 @@
 # This file is a part of Julia. License is MIT: http://julialang.org/license
 
-@testset "symmetric" begin
 srand(101)
 debug = false #Turn on for more debugging info
 
@@ -248,5 +247,4 @@ let a = randn(2,2)
     @test conj(c) == conj(Array(c))
     cc = copy(c)
     @test conj!(c) == conj(Array(c))
-end
 end

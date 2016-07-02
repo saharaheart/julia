@@ -1,6 +1,5 @@
 # This file is a part of Julia. License is MIT: http://julialang.org/license
 
-@testset "abstractarray" begin
 # Bounds checking
 A = rand(5,4,3)
 @test checkbounds(Bool, A, 1, 1, 1) == true
@@ -747,4 +746,3 @@ end
 @test ndims(Diagonal(rand(1:5,5))) == 2
 @test ndims(Diagonal{Float64}) == 2
 @test Base.elsize(Diagonal(rand(1:5,5))) == sizeof(Int)
-end
