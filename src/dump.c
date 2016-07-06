@@ -431,6 +431,7 @@ static void jl_update_all_fptrs(void)
     jl_lambda_info_t **linfos = (jl_lambda_info_t**)malloc(sizeof(jl_lambda_info_t*) * sysimg_fvars_max);
     for (i = 0; i < delayed_fptrs_n; i++) {
         jl_lambda_info_t *li = delayed_fptrs[i].li;
+        if (li->def == NULL) continue;
         int32_t func = delayed_fptrs[i].func - 1;
         if (func >= 0) {
             jl_fptr_to_llvm((jl_fptr_t)fvars[func], li, 0);
@@ -949,16 +950,19 @@ static void jl_serialize_value_(jl_serializer_state *s, jl_value_t *v)
         jl_serialize_value(s, li->rettype);
         jl_serialize_value(s, (jl_value_t*)li->sparam_syms);
         jl_serialize_value(s, (jl_value_t*)li->sparam_vals);
+        jl_serialize_value(s, (jl_value_t*)li->backedges);
         write_int8(s->s, li->pure);
         write_int8(s->s, li->inlineable);
         write_int8(s->s, li->isva);
         write_int32(s->s, li->nargs);
         jl_serialize_value(s, (jl_value_t*)li->def);
         jl_serialize_value(s, li->constval);
-        jl_serialize_fptr(s, (void*)(uintptr_t)li->fptr);
         // save functionObject pointers
-        write_int32(s->s, jl_assign_functionID(li->functionObjectsDecls.functionObject));
-        write_int32(s->s, jl_assign_functionID(li->functionObjectsDecls.specFunctionObject));
+        if (li->def) {
+            jl_serialize_fptr(s, (void*)(uintptr_t)li->fptr);
+            write_int32(s->s, jl_assign_functionID(li->functionObjectsDecls.functionObject));
+            write_int32(s->s, jl_assign_functionID(li->functionObjectsDecls.specFunctionObject));
+        }
         write_int8(s->s, li->jlcall_api);
     }
     else if (jl_typeis(v, jl_module_type)) {
@@ -1620,6 +1624,8 @@ static jl_value_t *jl_deserialize_value_(jl_serializer_state *s, jl_value_t *vta
         jl_gc_wb(li, li->sparam_syms);
         li->sparam_vals = (jl_svec_t*)jl_deserialize_value(s, (jl_value_t**)&li->sparam_vals);
         jl_gc_wb(li, li->sparam_vals);
+        li->backedges = (jl_array_t*)jl_deserialize_value(s, (jl_value_t**)&li->backedges);
+        if (li->backedges) jl_gc_wb(li, li->backedges);
         li->unspecialized_ducttape = NULL;
         li->pure = read_int8(s->s);
         li->inlineable = read_int8(s->s);
@@ -1634,11 +1640,16 @@ static jl_value_t *jl_deserialize_value_(jl_serializer_state *s, jl_value_t *vta
         li->functionObjectsDecls.specFunctionObject = NULL;
         li->inInference = 0;
         li->inCompile = 0;
-        li->fptr = jl_deserialize_fptr(s);
-        int32_t cfunc_llvm, func_llvm;
-        func_llvm = read_int32(s->s);
-        cfunc_llvm = read_int32(s->s);
-        jl_delayed_fptrs(li, func_llvm, cfunc_llvm);
+        if (li->def) {
+            li->fptr = jl_deserialize_fptr(s);
+            int32_t cfunc_llvm, func_llvm;
+            func_llvm = read_int32(s->s);
+            cfunc_llvm = read_int32(s->s);
+            jl_delayed_fptrs(li, func_llvm, cfunc_llvm);
+        }
+        else {
+            li->fptr = NULL;
+        }
         li->jlcall_api = read_int8(s->s);
         li->compile_traced = 0;
         return (jl_value_t*)li;
