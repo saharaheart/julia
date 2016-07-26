@@ -38,9 +38,7 @@ $(CURL_SRC_TARGET): $(BUILDDIR)/curl-$(CURL_VER)/config.status
 
 $(BUILDDIR)/curl-$(CURL_VER)/checked: $(CURL_SRC_TARGET)
 ifeq ($(OS),$(BUILD_OS))
-ifneq ($(OS),WINNT)
-	$(MAKE) -C $(dir $@) check -j1
-endif
+	$(MAKE) -C $(dir $@) check
 endif
 	echo 1 > $@
 
