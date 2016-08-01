@@ -15,7 +15,6 @@ show(io, Pair)
 """
 exename = Base.julia_cmd()
 run(`$exename --startup-file=no -e $script`)
-<<<<<<< ba9c684544c826ca26102cf0193cdc0dce913c5d
 
 # issue #17764
 script2 = """
