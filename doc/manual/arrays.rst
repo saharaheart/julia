@@ -478,7 +478,8 @@ The following built-in functions are also vectorized, whereby the functions act
 elementwise::
 
     abs abs2 angle cbrt
-    airy airyai airyaiprime airybi airybiprime airyprime
+    airyai airyaiprime airybi airybiprime
+    airyaix airyaiprimex airybix airybiprimex
     acos acosh asin asinh atan atan2 atanh
     acsc acsch asec asech acot acoth
     cos  cospi cosh  sin  sinpi sinh  tan  tanh  sinc  cosc
