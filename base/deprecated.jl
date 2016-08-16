@@ -790,4 +790,45 @@ function delete!(::EnvHash, k::AbstractString, def)
     haskey(ENV,k) ? delete!(ENV,k) : def
 end
 
+@deprecate airy(z) airyai(z)
+@deprecate airyx(z) airyaix(z)
+@deprecate airyprime(z) airyaiprime(z)
+function airy(k::Integer, z::Complex128)
+    depwarn("`airy(k,x)` is deprecated, use `airyai(x)`, `airyaiprime(x)`, `airybi(x)` or `airybiprime(x)` instead.",:airy)
+    id = Int32(k==1 || k==3)
+    if k == 0 || k == 1
+        return _airy(z, id, Int32(1))
+    elseif k == 2 || k == 3
+        return _biry(z, id, Int32(1))
+    else
+        throw(ArgumentError("k must be between 0 and 3"))
+    end
+end
+function airyx(k::Integer, z::Complex128)
+    depwarn("`airyx(k,x)` is deprecated, use `airyaix(x)`, `airyaiprimex(x)`, `airybix(x)` or `airybiprimex(x)` instead.",:airyx)
+    id = Int32(k==1 || k==3)
+    if k == 0 || k == 1
+        return _airy(z, id, Int32(2))
+    elseif k == 2 || k == 3
+        return _biry(z, id, Int32(2))
+    else
+        throw(ArgumentError("k must be between 0 and 3"))
+    end
+end
+for afn in (:airy,:airyx)
+    @eval begin
+        $afn(k::Integer, z::Complex) = $afn(k, float(z))
+        $afn{T<:AbstractFloat}(k::Integer, z::Complex{T}) = throw(MethodError($afn,(k,z)))
+        $afn(k::Integer, z::Complex64) = Complex64($afn(k, Complex128(z)))
+        $afn(k::Integer, x::Real) = $afn(k, float(x))
+        $afn(k::Integer, x::AbstractFloat) = real($afn(k, complex(x)))
+        @vectorize_1arg Number $afn
+        @vectorize_2arg Number $afn
+    end
+end
+
+
+
+
+
 # End deprecations scheduled for 0.6
