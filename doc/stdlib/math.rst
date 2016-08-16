@@ -1400,7 +1400,7 @@ Mathematical Functions
 
    .. Docstring generated from Julia source
 
-   Airy function :math:`\operatorname{Ai}(x)`\ .
+   Airy function of the first kind :math:`\operatorname{Ai}(x)`\ .
 
 .. function:: airyaiprime(x)
 

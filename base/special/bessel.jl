@@ -41,7 +41,7 @@ end
 
 
 """
-    airyai(x::Complex128)
+    airyai(x)
 
 Airy function of the first kind ``\\operatorname{Ai}(x)``.
 """
