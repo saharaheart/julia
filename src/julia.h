@@ -275,15 +275,20 @@ typedef struct _jl_lambda_info_t {
 // all values are callable as Functions
 typedef jl_value_t jl_function_t;
 
-// a TypeConstructor (typealias)
-// for example, Vector{T}:
-//   body is the Vector{T} <: Type
-//   parameters is the set {T}, the bound TypeVars in body
 typedef struct {
     JL_DATA_TYPE
-    jl_svec_t *parameters;
+    jl_sym_t *name;
+    jl_value_t *lb;   // lower bound
+    jl_value_t *ub;   // upper bound
+} jl_tvar_t;
+
+// UnionAll type (iterated union over all values of a variable in certain bounds)
+// written `body where lb<:var<:ub`
+typedef struct {
+    JL_DATA_TYPE
+    jl_tvar_t *var;
     jl_value_t *body;
-} jl_typector_t;
+} jl_unionall_t;
 
 // represents the "name" part of a DataType, describing the syntactic structure
 // of a type and storing all data common to different instantiations of the type,
@@ -293,10 +298,8 @@ typedef struct {
     jl_sym_t *name;
     struct _jl_module_t *module;
     jl_svec_t *names;  // field names
-    // if this is the name of a parametric type, this field points to the
-    // original type.
-    // a type alias, for example, might make a type constructor that is
-    // not the original.
+    // `primary` is either the only instantiation of the type (if no parameters)
+    // or a UnionAll accepting parameters to make an instantiation.
     jl_value_t *primary;
     jl_svec_t *cache;        // sorted array
     jl_svec_t *linearcache;  // unsorted array
@@ -306,7 +309,12 @@ typedef struct {
 
 typedef struct {
     JL_DATA_TYPE
-    jl_svec_t *types;
+} jl_bottomtype_t;
+
+typedef struct {
+    JL_DATA_TYPE
+    jl_value_t *a;
+    jl_value_t *b;
 } jl_uniontype_t;
 
 // in little-endian, isptr is always the first bit, avoiding the need for a branch in computing isptr
@@ -362,14 +370,6 @@ typedef struct _jl_datatype_t {
     int8_t haswildcard; // unbound
     int8_t isleaftype;
 } jl_datatype_t;
-
-typedef struct {
-    JL_DATA_TYPE
-    jl_sym_t *name;
-    jl_value_t *lb;   // lower bound
-    jl_value_t *ub;   // upper bound
-    uint8_t bound;    // part of a constraint environment
-} jl_tvar_t;
 
 typedef struct {
     JL_DATA_TYPE
@@ -454,13 +454,19 @@ typedef struct {
 
 // constants and type objects -------------------------------------------------
 
+// kinds
+extern JL_DLLEXPORT jl_datatype_t *jl_bottomtype_type;
+extern JL_DLLEXPORT jl_datatype_t *jl_datatype_type;
+extern JL_DLLEXPORT jl_datatype_t *jl_uniontype_type;
+extern JL_DLLEXPORT jl_datatype_t *jl_unionall_type;
+extern JL_DLLEXPORT jl_datatype_t *jl_tvar_type;
+
 extern JL_DLLEXPORT jl_datatype_t *jl_any_type;
 extern JL_DLLEXPORT jl_datatype_t *jl_type_type;
 extern JL_DLLEXPORT jl_tvar_t     *jl_typetype_tvar;
 extern JL_DLLEXPORT jl_datatype_t *jl_typetype_type;
 extern JL_DLLEXPORT jl_value_t    *jl_ANY_flag;
 extern JL_DLLEXPORT jl_datatype_t *jl_typename_type;
-extern JL_DLLEXPORT jl_datatype_t *jl_typector_type;
 extern JL_DLLEXPORT jl_datatype_t *jl_sym_type;
 extern JL_DLLEXPORT jl_datatype_t *jl_symbol_type;
 extern JL_DLLEXPORT jl_datatype_t *jl_ssavalue_type;
@@ -474,13 +480,9 @@ extern JL_DLLEXPORT jl_datatype_t *jl_anytuple_type;
 #define jl_tuple_type jl_anytuple_type
 extern JL_DLLEXPORT jl_datatype_t *jl_anytuple_type_type;
 extern JL_DLLEXPORT jl_datatype_t *jl_vararg_type;
-extern JL_DLLEXPORT jl_datatype_t *jl_tvar_type;
 extern JL_DLLEXPORT jl_datatype_t *jl_task_type;
 extern JL_DLLEXPORT jl_datatype_t *jl_function_type;
 extern JL_DLLEXPORT jl_datatype_t *jl_builtin_type;
-
-extern JL_DLLEXPORT jl_datatype_t *jl_uniontype_type;
-extern JL_DLLEXPORT jl_datatype_t *jl_datatype_type;
 
 extern JL_DLLEXPORT jl_value_t *jl_bottom_type;
 extern JL_DLLEXPORT jl_datatype_t *jl_lambda_info_type;
@@ -843,7 +845,7 @@ static inline uint32_t jl_fielddesc_size(int8_t fielddesc_type)
 #define jl_is_immutable_datatype(t) (jl_is_datatype(t) && (!((jl_datatype_t*)t)->mutabl))
 #define jl_is_uniontype(v)   jl_typeis(v,jl_uniontype_type)
 #define jl_is_typevar(v)     jl_typeis(v,jl_tvar_type)
-#define jl_is_typector(v)    jl_typeis(v,jl_typector_type)
+#define jl_is_unionall(v)    jl_typeis(v,jl_unionall_type)
 #define jl_is_TypeConstructor(v)    jl_typeis(v,jl_typector_type)
 #define jl_is_typename(v)    jl_typeis(v,jl_typename_type)
 #define jl_is_int8(v)        jl_typeis(v,jl_int8_type)
