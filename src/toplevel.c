@@ -699,8 +699,8 @@ static jl_datatype_t *first_arg_datatype(jl_value_t *a, int got_tuple1)
     else if (jl_is_typevar(a)) {
         return first_arg_datatype(((jl_tvar_t*)a)->ub, got_tuple1);
     }
-    else if (jl_is_typector(a)) {
-        return first_arg_datatype(((jl_typector_t*)a)->body, got_tuple1);
+    else if (jl_is_unionall(a)) {
+        return first_arg_datatype(((jl_unionall_t*)a)->body, got_tuple1);
     }
     else if (jl_is_uniontype(a)) {
         jl_svec_t *ts = ((jl_uniontype_t*)a)->types;

@@ -634,7 +634,7 @@ static inline jl_cgval_t remark_julia_type(const jl_cgval_t &v, jl_value_t *typ)
 static inline jl_cgval_t mark_julia_const(jl_value_t *jv)
 {
     jl_value_t *typ;
-    if (jl_is_datatype(jv) || jl_is_uniontype(jv) || jl_is_typector(jv))
+    if (jl_is_type(jv))
         typ = (jl_value_t*)jl_wrap_Type(jv);
     else
         typ = jl_typeof(jv);

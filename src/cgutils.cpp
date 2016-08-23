@@ -90,7 +90,7 @@ static DIType julia_type_to_di(jl_value_t *jt, DIBuilder *dbuilder, bool isboxed
         jt == (jl_value_t*)jl_simplevector_type || jt == (jl_value_t*)jl_datatype_type ||
         jt == (jl_value_t*)jl_lambda_info_type)
         return jl_pvalue_dillvmt;
-    if (jl_is_typector(jt) || jl_is_typevar(jt))
+    if (jl_is_unionall(jt) || jl_is_typevar(jt))
         return jl_pvalue_dillvmt;
     assert(jl_is_datatype(jt));
     jl_datatype_t *jdt = (jl_datatype_t*)jt;
@@ -961,7 +961,7 @@ static jl_value_t *expr_type(jl_value_t *e, jl_codectx_t *ctx)
             return (jl_value_t*)jl_any_type;
     }
 type_of_constant:
-    if (jl_is_datatype(e) || jl_is_uniontype(e) || jl_is_typector(e))
+    if (jl_is_type(e))
         return (jl_value_t*)jl_wrap_Type(e);
     return (jl_value_t*)jl_typeof(e);
 }

@@ -38,10 +38,12 @@ jl_typename_t *jl_vecelement_typename;
 jl_datatype_t *jl_vararg_type;
 jl_datatype_t *jl_tvar_type;
 jl_datatype_t *jl_uniontype_type;
+jl_datatype_t *jl_unionall_type;
 jl_datatype_t *jl_datatype_type;
 jl_datatype_t *jl_function_type;
 jl_datatype_t *jl_builtin_type;
 
+jl_value_t *jl_bottomtype_type;
 jl_value_t *jl_bottom_type;
 jl_datatype_t *jl_abstractarray_type;
 jl_datatype_t *jl_densearray_type;
@@ -215,6 +217,7 @@ JL_DLLEXPORT int jl_get_size(jl_value_t *val, size_t *pnt)
     }
     return 0;
 }
+
 // --- type union ---
 
 static int count_union_components(jl_value_t **types, size_t n)
@@ -3454,25 +3457,6 @@ jl_value_t *jl_type_match_morespecific(jl_value_t *a, jl_value_t *b)
 }
 
 // initialization -------------------------------------------------------------
-
-JL_DLLEXPORT jl_tvar_t *jl_new_typevar_(jl_sym_t *name, jl_value_t *lb,
-                                        jl_value_t *ub, jl_value_t *b)
-{
-    jl_ptls_t ptls = jl_get_ptls_states();
-    jl_tvar_t *tv = (jl_tvar_t*)jl_gc_alloc(ptls, sizeof(jl_tvar_t),
-                                            jl_tvar_type);
-    tv->name = name;
-    tv->lb = lb;
-    tv->ub = ub;
-    tv->bound = (b != jl_false);
-    return tv;
-}
-
-JL_DLLEXPORT jl_tvar_t *jl_new_typevar(jl_sym_t *name, jl_value_t *lb,
-                                       jl_value_t *ub)
-{
-    return jl_new_typevar_(name, lb, ub, jl_false);
-}
 
 static jl_tvar_t *tvar(const char *name)
 {

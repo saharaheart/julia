@@ -964,7 +964,8 @@ JL_DLLEXPORT void jl_show(jl_value_t *stream, jl_value_t *v)
 JL_CALLABLE(jl_f_apply_type)
 {
     JL_NARGSV(apply_type, 1);
-    if (!jl_is_datatype(args[0]) && !jl_is_typector(args[0])) {
+    if (!jl_is_unionall(args[0]) && args[0] != (jl_value_t*)jl_anytuple_type &&
+        args[0] != (jl_value_t*)jl_uniontype_type)
         jl_type_error("Type{...} expression", (jl_value_t*)jl_type_type, args[0]);
     }
     return jl_apply_type_(args[0], &args[1], nargs-1);
@@ -1148,16 +1149,16 @@ void jl_init_primitives(void)
 
     // builtin types
     add_builtin("Any", (jl_value_t*)jl_any_type);
+    add_builtin("Type", (jl_value_t*)jl_type_type);
     add_builtin("Void", (jl_value_t*)jl_void_type);
     add_builtin("nothing", (jl_value_t*)jl_nothing);
-    add_builtin("TypeVar", (jl_value_t*)jl_tvar_type);
     add_builtin("TypeName", (jl_value_t*)jl_typename_type);
-    add_builtin("TypeConstructor", (jl_value_t*)jl_typector_type);
+    add_builtin("DataType", (jl_value_t*)jl_datatype_type);
+    add_builtin("TypeVar", (jl_value_t*)jl_tvar_type);
+    add_builtin("UnionAll", (jl_value_t*)jl_unionall_type);
+    add_builtin("Union", (jl_value_t*)jl_uniontype_type);
     add_builtin("Tuple", (jl_value_t*)jl_anytuple_type);
     add_builtin("Vararg", (jl_value_t*)jl_vararg_type);
-    add_builtin("Type", (jl_value_t*)jl_type_type);
-    add_builtin("DataType", (jl_value_t*)jl_datatype_type);
-    add_builtin("Union", (jl_value_t*)jl_uniontype_type);
     add_builtin("SimpleVector", (jl_value_t*)jl_simplevector_type);
 
     add_builtin("Module", (jl_value_t*)jl_module_type);
@@ -1344,8 +1345,10 @@ static size_t jl_static_show_x_(JL_STREAM *out, jl_value_t *v, jl_datatype_t *vt
     else if (vt == jl_uniontype_type) {
         n += jl_show_svec(out, ((jl_uniontype_t*)v)->types, "Union", "{", "}");
     }
-    else if (vt == jl_typector_type) {
-        n += jl_static_show_x(out, ((jl_typector_t*)v)->body, depth);
+    else if (vt == jl_unionall_type) {
+        n += jl_static_show_x(out, ((jl_unionall_t*)v)->body, depth);
+        n += jl_printf(out, " where ");
+        n += jl_static_show_x(out, ((jl_unionall_t*)v)->var, depth);
     }
     else if (vt == jl_tvar_type) {
         if (((jl_tvar_t*)v)->lb != jl_bottom_type) {

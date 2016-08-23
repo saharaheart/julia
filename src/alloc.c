@@ -21,8 +21,6 @@ jl_tvar_t     *jl_typetype_tvar;
 jl_datatype_t *jl_typetype_type;
 jl_value_t    *jl_ANY_flag;
 
-jl_datatype_t *jl_typector_type;
-
 jl_datatype_t *jl_array_type;
 jl_typename_t *jl_array_typename;
 jl_value_t *jl_array_uint8_type;
@@ -1121,26 +1119,22 @@ JL_DLLEXPORT jl_datatype_t *jl_new_bitstype(jl_value_t *name, jl_datatype_t *sup
     return bt;
 }
 
-// type constructor -----------------------------------------------------------
+// unionall types -------------------------------------------------------------
 
-JL_DLLEXPORT jl_value_t *jl_new_type_constructor(jl_svec_t *p, jl_value_t *body)
+JL_DLLEXPORT jl_tvar_t *jl_new_typevar(jl_sym_t *name, jl_value_t *lb, jl_value_t *ub)
 {
     jl_ptls_t ptls = jl_get_ptls_states();
-#ifndef NDEBUG
-    size_t i, np = jl_svec_len(p);
-    for (i = 0; i < np; i++) {
-        jl_tvar_t *tv = (jl_tvar_t*)jl_svecref(p, i);
-        assert(jl_is_typevar(tv) && !tv->bound);
-    }
-#endif
-    jl_typector_t *tc =
-        (jl_typector_t*)jl_gc_alloc(ptls, sizeof(jl_typector_t),
-                                    jl_typector_type);
-    tc->parameters = p;
-    tc->body = body;
-    return (jl_value_t*)tc;
+    jl_tvar_t *tv = (jl_tvar_t*)jl_gc_alloc(ptls, sizeof(jl_tvar_t), jl_tvar_type);
+    tv->name = name;
+    tv->lb = lb;
+    tv->ub = ub;
+    return tv;
 }
 
+JL_DLLEXPORT jl_value_t *jl_new_unionall_type(jl_tvar_t *v, jl_value_t *body)
+{
+    return jl_new_struct(jl_unionall_type, v, body);
+}
 
 // bits constructors ----------------------------------------------------------
 

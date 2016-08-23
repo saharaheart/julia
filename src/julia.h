@@ -846,7 +846,6 @@ static inline uint32_t jl_fielddesc_size(int8_t fielddesc_type)
 #define jl_is_uniontype(v)   jl_typeis(v,jl_uniontype_type)
 #define jl_is_typevar(v)     jl_typeis(v,jl_tvar_type)
 #define jl_is_unionall(v)    jl_typeis(v,jl_unionall_type)
-#define jl_is_TypeConstructor(v)    jl_typeis(v,jl_typector_type)
 #define jl_is_typename(v)    jl_typeis(v,jl_typename_type)
 #define jl_is_int8(v)        jl_typeis(v,jl_int8_type)
 #define jl_is_int16(v)       jl_typeis(v,jl_int16_type)
@@ -879,6 +878,13 @@ static inline uint32_t jl_fielddesc_size(int8_t fielddesc_type)
 #define jl_is_string(v)      jl_typeis(v,jl_string_type)
 #define jl_is_cpointer(v)    jl_is_cpointer_type(jl_typeof(v))
 #define jl_is_pointer(v)     jl_is_cpointer_type(jl_typeof(v))
+
+STATIC_INLINE int jl_is_type(jl_value_t *v)
+{
+    jl_value_t *t = jl_typeof(v);
+    return (t == (jl_value_t*)jl_datatype_type || t == (jl_value_t*)jl_uniontype_type ||
+            t == (jl_value_t*)jl_unionall_type || v == jl_bottom_type);
+}
 
 STATIC_INLINE int jl_is_bitstype(void *v)
 {
@@ -998,7 +1004,8 @@ STATIC_INLINE int jl_is_leaf_type_(jl_value_t *v)
 
 // type constructors
 JL_DLLEXPORT jl_typename_t *jl_new_typename(jl_sym_t *name);
-JL_DLLEXPORT jl_tvar_t *jl_new_typevar(jl_sym_t *name,jl_value_t *lb,jl_value_t *ub);
+JL_DLLEXPORT jl_tvar_t *jl_new_typevar(jl_sym_t *name, jl_value_t *lb, jl_value_t *ub);
+JL_DLLEXPORT jl_value_t *jl_new_unionall_type(jl_tvar_t *v, jl_value_t *body);
 JL_DLLEXPORT jl_value_t *jl_apply_type(jl_value_t *tc, jl_svec_t *params);
 JL_DLLEXPORT jl_tupletype_t *jl_apply_tuple_type(jl_svec_t *params);
 JL_DLLEXPORT jl_tupletype_t *jl_apply_tuple_type_v(jl_value_t **p, size_t np);

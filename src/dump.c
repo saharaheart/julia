@@ -2042,7 +2042,7 @@ static void jl_restore_system_image_from_stream(ios_t *f)
     jl_internal_main_module = jl_main_module;
     jl_typeinf_func = (jl_function_t*)jl_deserialize_value(&s, NULL);
     jl_type_type_mt = (jl_methtable_t*)jl_deserialize_value(&s, NULL);
-    jl_type_type->name->mt = jl_typector_type->name->mt = jl_uniontype_type->name->mt = jl_datatype_type->name->mt =
+    jl_type_type->name->mt = jl_unionall_type->name->mt = jl_uniontype_type->name->mt = jl_datatype_type->name->mt =
         jl_type_type_mt;
 
     intptr_t i;
@@ -2508,7 +2508,7 @@ void jl_init_serializer(void)
                      jl_type_type, jl_bottom_type, jl_ref_type, jl_pointer_type,
                      jl_vararg_type, jl_abstractarray_type,
                      jl_densearray_type, jl_void_type, jl_function_type,
-                     jl_typector_type, jl_typename_type, jl_builtin_type,
+                     jl_unionall_type, jl_typename_type, jl_builtin_type,
                      jl_task_type, jl_uniontype_type, jl_typetype_type, jl_typetype_tvar,
                      jl_ANY_flag, jl_array_any_type, jl_intrinsic_type, jl_abstractslot_type,
                      jl_methtable_type, jl_typemap_level_type, jl_typemap_entry_type,
@@ -2524,7 +2524,7 @@ void jl_init_serializer(void)
                      jl_densearray_type->name, jl_void_type->name, jl_lambda_info_type->name, jl_method_type->name,
                      jl_module_type->name, jl_function_type->name, jl_typedslot_type->name,
                      jl_abstractslot_type->name, jl_slotnumber_type->name,
-                     jl_typector_type->name, jl_intrinsic_type->name, jl_task_type->name,
+                     jl_unionall_type->name, jl_intrinsic_type->name, jl_task_type->name,
                      jl_labelnode_type->name, jl_linenumbernode_type->name, jl_builtin_type->name,
                      jl_gotonode_type->name, jl_quotenode_type->name,
                      jl_globalref_type->name,
