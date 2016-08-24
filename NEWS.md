@@ -14,6 +14,11 @@ New language features
 Language changes
 ----------------
 
+  * The REPL now prints errors with more structure and more color. 
+    Also, the stacktrace is printed with the in the reverse order from previously and with the error message at the very bottom. 
+    The rationale behind this is that it puts the relevant info closer to the cursor so one does not need to scroll up. 
+    To get the previous format of the  error reporting add `ENV["LEGACY_ERRORS"] = true` to your `.juliarc.jl` file.
+
 Breaking changes
 ----------------
 

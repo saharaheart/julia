@@ -14,6 +14,7 @@ const text_colors = AnyDict(
     :white   => "\033[1m\033[37m",
     :normal  => "\033[0m",
     :bold    => "\033[1m",
+    :nothing => "",
 )
 
 # Create a docstring with an automatically generated list

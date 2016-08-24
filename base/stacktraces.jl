@@ -202,14 +202,22 @@ end
 
 function show(io::IO, frame::StackFrame; full_path::Bool=false)
     print(io, " in ")
-    show_spec_linfo(io, frame)
+    col = get(io, :REPLError, false)  ? Base.REPL.error_funcdef_color : :nothing
+    Base.with_output_color(col, io) do io
+        show_spec_linfo(io, frame)
+    end
     if frame.file !== empty_sym
         file_info = full_path ? string(frame.file) : basename(string(frame.file))
-        print(io, " at ", file_info, ":")
-        if frame.line >= 0
-            print(io, frame.line)
-        else
-            print(io, "?")
+        get(io, :REPLError, false) && print(io, "\n    ⌙")
+        print(io, " at ")
+        col = get(io, :REPLError, false)  ? Base.REPL.error_file_color : :nothing
+        Base.with_output_color(col, io) do io
+            print(io, file_info, ":")
+            if frame.line >= 0
+                print(io, frame.line)
+            else
+                print(io, "?")
+            end
         end
     end
     if frame.inlined
