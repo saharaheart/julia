@@ -32,6 +32,8 @@ typedef struct {
     jl_unionstate_t Lunions;
     jl_unionstate_t Runions;
     int8_t outer;
+    jl_value_t **envout;
+    int envidx;
 } jl_stenv_t;
 
 // state manipulation utilities
@@ -93,6 +95,7 @@ static int var_lt(jl_tvar_t *b, jl_value_t *a, jl_stenv_t *e)
 {
     e->outer = 0;
     jl_varbinding_t *bb = lookup(e, b);
+    if (bb == NULL) jl_error("invalid subtype query");
     if (!bb->right)  // check ∀b . b<:a
         return subtype(bb->ub, a, e);
     if (!subtype(bb->lb, a, e))
@@ -118,6 +121,7 @@ static int var_gt(jl_tvar_t *b, jl_value_t *a, jl_stenv_t *e)
 {
     e->outer = 0;
     jl_varbinding_t *bb = lookup(e, b);
+    if (bb == NULL) jl_error("invalid subtype query");
     if (!bb->right)  // check ∀b . b>:a
         return subtype(a, bb->lb, e);
     if (!subtype(a, bb->ub, e))
@@ -138,24 +142,31 @@ static jl_unionall_t *rename(jl_unionall_t *u)
 static int subtype_unionall(jl_value_t *t, jl_unionall_t *u, jl_stenv_t *e, int8_t R)
 {
     int outer = e->outer;
-    JL_GC_PUSH1(&u);
     if (lookup(e, u->var))
         u = rename(u);
-    jl_varbinding_t vb;
-    jl_varbinding_t *pvb;
-    if (outer)
-        pvb = malloc(sizeof(jl_varbinding_t));
-    else
-        pvb = &vb;
-    pvb->tv = u->var;
-    pvb->lb = u->var->lb;
-    pvb->ub = u->var->ub;
-    pvb->right = R;
-    pvb->prev = e->vars;
-    e->vars = pvb;
-    int ans = R ? subtype(t, u->body, e) : subtype(u->body, t, e);
-    if (!outer)
-        e->vars = pvb->prev;
+    jl_varbinding_t vb = { u->var, u->var->lb, u->var->ub, R, e->vars };
+    JL_GC_PUSH2(&u, &vb.lb);
+    e->vars = &vb;
+    int ans;
+    if (R) {
+        e->envidx++;
+        ans = subtype(t, u->body, e);
+        e->envidx--;
+        if (outer && e->envout) {
+            jl_value_t *val;
+            if (vb.lb == vb.ub)
+                val = vb.ub;
+            else if (vb.lb == u->var->lb && vb.ub == u->var->ub)
+                val = u->var;
+            else
+                val = jl_new_typevar(u->var->name, vb.lb, vb.ub);
+            e->envout[e->envidx] = val;
+        }
+    }
+    else {
+        ans = subtype(u->body, t, e);
+    }
+    e->vars = vb.prev;
     JL_GC_POP();
     return ans;
 }
@@ -183,6 +194,8 @@ static int subtype(jl_value_t *x, jl_value_t *y, jl_stenv_t *e)
             if (x == y) return 1;
             jl_varbinding_t *xx = lookup(e, x);
             jl_varbinding_t *yy = lookup(e, y);
+            if (xx==NULL || yy==NULL)
+                jl_error("invalid subtype query");
             if (xx->right) {
                 if (yy->right) {
                     // this is a bit odd, but seems necessary to make this case work:
@@ -266,8 +279,15 @@ static int exists_subtype(jl_value_t *x, jl_value_t *y, jl_stenv_t *e, int8_t an
         e->Lunions.depth = e->Runions.depth = 0;
         e->Lunions.more = e->Runions.more = 0;
         int found = subtype(x, y, e);
-        if (e->Lunions.more)
+        if (e->Lunions.more) {
+            // return up to forall_exists_subtype. the recursion must have this shape:
+            // ∀₁         ∀₁
+            //   ∃₁  =>     ∀₂
+            //                ...
+            //                ∃₁
+            //                  ∃₂
             return 1;
+        }
         if (e->Runions.more) {
             statestack_push(&e->Runions, 0);
             found = exists_subtype(x, y, e, 1);
@@ -296,18 +316,53 @@ static int forall_exists_subtype(jl_value_t *x, jl_value_t *y, jl_stenv_t *e, in
     return 1;
 }
 
-JL_DLLEXPORT int jl_subtype_env(jl_value_t *x, jl_value_t *y, jl_stenv_t *e)
+JL_DLLEXPORT int jl_subtype_env_size(jl_value_t *t)
 {
-    e->vars = NULL;
-    e->outer = 1;
-    e->Lunions.depth = 0;      e->Runions.depth = 0;
-    e->Lunions.more = 0;       e->Runions.more = 0;
-    e->Lunions.stacksize = 0;  e->Runions.stacksize = 0;
-    return forall_exists_subtype(x, y, e, 0);
+    int sz = 0;
+    while (jl_is_unionall(t)) {
+        sz++;
+        t = ((jl_unionall_t*)t)->body;
+    }
+    return sz;
+}
+
+// `env` is NULL if no typevar information is requested, or otherwise
+// points to a rooted array of length `jl_subtype_env_size(y)`.
+JL_DLLEXPORT int jl_subtype_env(jl_value_t *x, jl_value_t *y, jl_value_t **env)
+{
+    jl_stenv_t e;
+    e.vars = NULL;
+    e.outer = 1;
+    e.envout = env;
+    e.envidx = 0;
+    e.Lunions.depth = 0;      e.Runions.depth = 0;
+    e.Lunions.more = 0;       e.Runions.more = 0;
+    e.Lunions.stacksize = 0;  e.Runions.stacksize = 0;
+    return forall_exists_subtype(x, y, &e, 0);
 }
 
 JL_DLLEXPORT int jl_subtype(jl_value_t *x, jl_value_t *y)
 {
-    jl_stenv_t e;
-    return jl_subtype_env(x, y, &e);
+    return jl_subtype_env(x, y, NULL);
+}
+
+JL_DLLEXPORT int jl_isa(jl_value_t *x, jl_value_t *t)
+{
+    if (jl_typeis(x,t))
+        return 1;
+    if (jl_is_type(x)) {
+        if (jl_is_leaf_type(t)) {
+            if (jl_is_type_type(t))
+                return jl_subtype(x, jl_tparam0(t)) && jl_subtype(jl_tparam0(t), x);
+            return 0;
+        }
+        JL_GC_PUSH1(&x);
+        x = jl_wrap_Type(x);
+        int ans = jl_subtype(x, t);
+        JL_GC_POP();
+        return ans;
+    }
+    if (jl_is_leaf_type(t))
+        return 0;
+    return jl_subtype(jl_typeof(x), t);
 }
