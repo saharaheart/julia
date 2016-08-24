@@ -1167,7 +1167,7 @@ static jl_value_t *jl_deserialize_datatype(jl_serializer_state *s, int pos, jl_v
         jl_value_t *dtv = name->primary;
         if (tag == 7) {
             jl_svec_t *parameters = (jl_svec_t*)jl_deserialize_value(s, NULL);
-            dtv = jl_apply_type(dtv, parameters);
+            dtv = jl_apply_type(dtv, jl_svec_data(parameters), jl_svec_len(parameters));
         }
         backref_list.items[pos] = dtv;
         return dtv;

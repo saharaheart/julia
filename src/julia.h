@@ -855,8 +855,8 @@ static inline uint32_t jl_fielddesc_size(int8_t fielddesc_type)
 #define jl_is_uint16(v)      jl_typeis(v,jl_uint16_type)
 #define jl_is_uint32(v)      jl_typeis(v,jl_uint32_type)
 #define jl_is_uint64(v)      jl_typeis(v,jl_uint64_type)
-#define jl_is_float(v)       jl_subtype(v,(jl_value_t*)jl_floatingpoint_type,1)
-#define jl_is_floattype(v)   jl_subtype(v,(jl_value_t*)jl_floatingpoint_type,0)
+#define jl_is_float(v)       jl_isa(v,(jl_value_t*)jl_floatingpoint_type)
+#define jl_is_floattype(v)   jl_subtype(v,(jl_value_t*)jl_floatingpoint_type)
 #define jl_is_float32(v)     jl_typeis(v,jl_float32_type)
 #define jl_is_float64(v)     jl_typeis(v,jl_float64_type)
 #define jl_is_bool(v)        jl_typeis(v,jl_bool_type)
@@ -984,10 +984,13 @@ JL_DLLEXPORT uintptr_t jl_object_id(jl_value_t *v);
 
 // type predicates and basic operations
 JL_DLLEXPORT int jl_is_leaf_type(jl_value_t *v);
-JL_DLLEXPORT int jl_has_typevars(jl_value_t *v);
-JL_DLLEXPORT int jl_subtype(jl_value_t *a, jl_value_t *b, int ta);
+JL_DLLEXPORT int jl_has_free_typevars(jl_value_t *v);
+JL_DLLEXPORT int jl_subtype(jl_value_t *a, jl_value_t *b);
+JL_DLLEXPORT int jl_subtype_env_size(jl_value_t *t);
+JL_DLLEXPORT int jl_subtype_env(jl_value_t *x, jl_value_t *y, jl_value_t **env);
+JL_DLLEXPORT int jl_isa(jl_value_t *a, jl_value_t *t);
 JL_DLLEXPORT int jl_types_equal(jl_value_t *a, jl_value_t *b);
-JL_DLLEXPORT jl_value_t *jl_type_union(jl_svec_t *types);
+JL_DLLEXPORT jl_value_t *jl_type_union(jl_value_t **ts, size_t n);
 JL_DLLEXPORT jl_value_t *jl_type_intersection(jl_value_t *a, jl_value_t *b);
 JL_DLLEXPORT int jl_args_morespecific(jl_value_t *a, jl_value_t *b);
 JL_DLLEXPORT const char *jl_typename_str(jl_value_t *v);
@@ -1006,7 +1009,10 @@ STATIC_INLINE int jl_is_leaf_type_(jl_value_t *v)
 JL_DLLEXPORT jl_typename_t *jl_new_typename(jl_sym_t *name);
 JL_DLLEXPORT jl_tvar_t *jl_new_typevar(jl_sym_t *name, jl_value_t *lb, jl_value_t *ub);
 JL_DLLEXPORT jl_value_t *jl_new_unionall_type(jl_tvar_t *v, jl_value_t *body);
-JL_DLLEXPORT jl_value_t *jl_apply_type(jl_value_t *tc, jl_svec_t *params);
+JL_DLLEXPORT jl_value_t *jl_instantiate_unionall(jl_unionall_t *u, jl_value_t *p);
+JL_DLLEXPORT jl_value_t *jl_apply_type(jl_value_t *tc, jl_value_t **params, size_t n);
+JL_DLLEXPORT jl_value_t *jl_apply_type1(jl_value_t *tc, jl_value_t *p1);
+JL_DLLEXPORT jl_value_t *jl_apply_type2(jl_value_t *tc, jl_value_t *p1, jl_value_t *p2);
 JL_DLLEXPORT jl_tupletype_t *jl_apply_tuple_type(jl_svec_t *params);
 JL_DLLEXPORT jl_tupletype_t *jl_apply_tuple_type_v(jl_value_t **p, size_t np);
 JL_DLLEXPORT jl_datatype_t *jl_new_datatype(jl_sym_t *name, jl_datatype_t *super,

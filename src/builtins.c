@@ -367,24 +367,22 @@ JL_CALLABLE(jl_f_sizeof)
 
 JL_CALLABLE(jl_f_issubtype)
 {
-    JL_NARGS(subtype, 2, 2);
-    if (!jl_is_typevar(args[0]))
-        JL_TYPECHK(subtype, type, args[0]);
-    if (!jl_is_typevar(args[1]))
-        JL_TYPECHK(subtype, type, args[1]);
-    return (jl_subtype(args[0],args[1],0) ? jl_true : jl_false);
+    JL_NARGS(issubtype, 2, 2);
+    JL_TYPECHK(issubtype, type, args[0]);
+    JL_TYPECHK(issubtype, type, args[1]);
+    return (jl_subtype(args[0],args[1]) ? jl_true : jl_false);
 }
 
 JL_CALLABLE(jl_f_isa)
 {
     JL_NARGS(isa, 2, 2);
     JL_TYPECHK(isa, type, args[1]);
-    return (jl_subtype(args[0],args[1],1) ? jl_true : jl_false);
+    return (jl_isa(args[0],args[1]) ? jl_true : jl_false);
 }
 
 JL_DLLEXPORT void jl_typeassert(jl_value_t *x, jl_value_t *t)
 {
-    if (!jl_subtype(x,t,1))
+    if (!jl_isa(x,t))
         jl_type_error("typeassert", t, x);
 }
 
@@ -392,7 +390,7 @@ JL_CALLABLE(jl_f_typeassert)
 {
     JL_NARGS(typeassert, 2, 2);
     JL_TYPECHK(typeassert, type, args[1]);
-    if (!jl_subtype(args[0],args[1],1))
+    if (!jl_isa(args[0],args[1]))
         jl_type_error("typeassert", args[1], args[0]);
     return args[0];
 }
@@ -968,7 +966,7 @@ JL_CALLABLE(jl_f_apply_type)
         args[0] != (jl_value_t*)jl_uniontype_type)
         jl_type_error("Type{...} expression", (jl_value_t*)jl_type_type, args[0]);
     }
-    return jl_apply_type_(args[0], &args[1], nargs-1);
+    return jl_apply_type(args[0], &args[1], nargs-1);
 }
 
 // generic function reflection ------------------------------------------------

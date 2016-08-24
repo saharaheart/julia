@@ -657,7 +657,7 @@ static jl_cgval_t emit_cglobal(jl_value_t **args, size_t nargs, jl_codectx_t *ct
         }
 
         JL_TYPECHK(cglobal, type, rt);
-        rt = (jl_value_t*)jl_apply_type((jl_value_t*)jl_pointer_type, jl_svec1(rt));
+        rt = (jl_value_t*)jl_apply_type1((jl_value_t*)jl_pointer_type, rt);
     }
     else {
         rt = (jl_value_t*)jl_voidpointer_type;
