@@ -1012,9 +1012,11 @@ end
 function show_lambda_types(io::IO, li::LambdaInfo)
     isreplerror = get(io, :REPLError, false)
     local sig
+    returned_from_do = false
     Base.with_output_color(isreplerror  ? err_funcdef_color() : :nothing, io) do io
         if li.specTypes === Tuple
             print(io, li.def.name, "(...)")
+            returned_from_do = true
             return
         end
         sig = li.specTypes.parameters
@@ -1030,6 +1032,7 @@ function show_lambda_types(io::IO, li::LambdaInfo)
             print(io, "(::", ft, ")")
         end
     end
+    returned_from_do && return
     first = true
     isreplerror ? print_with_color(:bold, io, "(") : print(io, '(')
     for i = 2:length(sig)  # fixme (iter): `eachindex` with offset?

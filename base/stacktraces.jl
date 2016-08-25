@@ -202,7 +202,7 @@ end
 
 function show(io::IO, frame::StackFrame; full_path::Bool=false)
     isreplerror = get(io, :REPLError, false)
-    isreplerror ? print_with_color(:bold, io, " — ") : print(io, " at ")
+    isreplerror ? print_with_color(:bold, io, " — ") : print(io, " in ")
     show_spec_linfo(io, frame)
     if frame.file !== empty_sym
         file_info = full_path ? string(frame.file) : basename(string(frame.file))
