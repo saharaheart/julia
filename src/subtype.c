@@ -95,7 +95,8 @@ static int var_lt(jl_tvar_t *b, jl_value_t *a, jl_stenv_t *e)
 {
     e->outer = 0;
     jl_varbinding_t *bb = lookup(e, b);
-    if (bb == NULL) jl_error("invalid subtype query");
+    if (bb == NULL)
+        return subtype(b->ub, a, e);
     if (!bb->right)  // check ∀b . b<:a
         return subtype(bb->ub, a, e);
     if (!subtype(bb->lb, a, e))
@@ -121,7 +122,8 @@ static int var_gt(jl_tvar_t *b, jl_value_t *a, jl_stenv_t *e)
 {
     e->outer = 0;
     jl_varbinding_t *bb = lookup(e, b);
-    if (bb == NULL) jl_error("invalid subtype query");
+    if (bb == NULL)
+        return subtype(a, b->lb, e);
     if (!bb->right)  // check ∀b . b>:a
         return subtype(a, bb->lb, e);
     if (!subtype(a, bb->ub, e))
@@ -194,24 +196,25 @@ static int subtype(jl_value_t *x, jl_value_t *y, jl_stenv_t *e)
             if (x == y) return 1;
             jl_varbinding_t *xx = lookup(e, x);
             jl_varbinding_t *yy = lookup(e, y);
-            if (xx==NULL || yy==NULL)
-                jl_error("invalid subtype query");
-            if (xx->right) {
-                if (yy->right) {
+            int xr = xx && xx->right;  // treat free variables as "forall" (left)
+            int yr = yy && yy->right;
+            if (xr) {
+                if (yr) {
                     // this is a bit odd, but seems necessary to make this case work:
                     // (UnionAll x<:T<:x RefT{RefT{T}}) == RefT{UnionAll x<:T<:x RefT{T}}
                     return subtype(yy->ub, yy->lb, e);
                 }
                 return var_lt((jl_tvar_t*)x, y, e);
             }
-            else if (!yy->right) {   // check ∀x,y . x<:y
-                // the bounds of left-side variables never change, and can only lead
-                // to other left-side variables, so using || here is safe.
-                return subtype(xx->ub, y, e) || subtype(x, yy->lb, e);
-            }
-            else {
+            else if (yr) {
                 return var_gt((jl_tvar_t*)y, x, e);
             }
+            jl_value_t *xub = xx ? xx->ub : ((jl_tvar_t*)x)->ub;
+            jl_value_t *ylb = yy ? yy->lb : ((jl_tvar_t*)y)->lb;
+            // check ∀x,y . x<:y
+            // the bounds of left-side variables never change, and can only lead
+            // to other left-side variables, so using || here is safe.
+            return subtype(xub, y, e) || subtype(x, ylb, e);
         }
         return var_lt((jl_tvar_t*)x, y, e);
     }
