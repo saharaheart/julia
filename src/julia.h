@@ -205,7 +205,7 @@ typedef struct _jl_method_t {
     int32_t line;
 
     // method's type signature. partly redundant with lambda_template->specTypes
-    jl_tupletype_t *sig;
+    jl_type_t *sig;
     // bound type variables (static parameters). redundant with TypeMapEntry->tvars
     jl_svec_t *tvars;
     // list of potentially-ambiguous methods (nothing = none, Vector{Any} of Methods otherwise)
@@ -244,7 +244,7 @@ typedef struct _jl_lambda_info_t {
     jl_value_t *rettype;
     jl_svec_t *sparam_syms; // sparams is a vector of values indexed by symbols
     jl_svec_t *sparam_vals;
-    jl_tupletype_t *specTypes;  // argument types this was specialized for
+    jl_type_t *specTypes;  // argument types this was specialized for
     jl_value_t *code;  // compressed uint8 array, or Any array of statements
     jl_value_t *slottypes;
     jl_value_t *ssavaluetypes;  // types of ssa values
@@ -366,8 +366,7 @@ typedef struct _jl_datatype_t {
     void *struct_decl;  //llvm::Type*
     void *ditype; // llvm::MDNode* to be used as llvm::DIType(ditype)
     int32_t depth;
-    int8_t hastypevars; // bound
-    int8_t haswildcard; // unbound
+    int8_t hasfreetypevars;
     int8_t isleaftype;
 } jl_datatype_t;
 
@@ -462,9 +461,9 @@ extern JL_DLLEXPORT jl_datatype_t *jl_unionall_type;
 extern JL_DLLEXPORT jl_datatype_t *jl_tvar_type;
 
 extern JL_DLLEXPORT jl_datatype_t *jl_any_type;
-extern JL_DLLEXPORT jl_datatype_t *jl_type_type;
+extern JL_DLLEXPORT jl_unionall_t *jl_type_type;
 extern JL_DLLEXPORT jl_tvar_t     *jl_typetype_tvar;
-extern JL_DLLEXPORT jl_datatype_t *jl_typetype_type;
+extern JL_DLLEXPORT jl_unionall_t *jl_typetype_type;
 extern JL_DLLEXPORT jl_value_t    *jl_ANY_flag;
 extern JL_DLLEXPORT jl_datatype_t *jl_typename_type;
 extern JL_DLLEXPORT jl_datatype_t *jl_sym_type;
@@ -479,7 +478,7 @@ extern JL_DLLEXPORT jl_typename_t *jl_vecelement_typename;
 extern JL_DLLEXPORT jl_datatype_t *jl_anytuple_type;
 #define jl_tuple_type jl_anytuple_type
 extern JL_DLLEXPORT jl_datatype_t *jl_anytuple_type_type;
-extern JL_DLLEXPORT jl_datatype_t *jl_vararg_type;
+extern JL_DLLEXPORT jl_unionall_t *jl_vararg_type;
 extern JL_DLLEXPORT jl_datatype_t *jl_task_type;
 extern JL_DLLEXPORT jl_datatype_t *jl_function_type;
 extern JL_DLLEXPORT jl_datatype_t *jl_builtin_type;
@@ -488,9 +487,9 @@ extern JL_DLLEXPORT jl_value_t *jl_bottom_type;
 extern JL_DLLEXPORT jl_datatype_t *jl_lambda_info_type;
 extern JL_DLLEXPORT jl_datatype_t *jl_method_type;
 extern JL_DLLEXPORT jl_datatype_t *jl_module_type;
-extern JL_DLLEXPORT jl_datatype_t *jl_abstractarray_type;
-extern JL_DLLEXPORT jl_datatype_t *jl_densearray_type;
-extern JL_DLLEXPORT jl_datatype_t *jl_array_type;
+extern JL_DLLEXPORT jl_unionall_t *jl_abstractarray_type;
+extern JL_DLLEXPORT jl_unionall_t *jl_densearray_type;
+extern JL_DLLEXPORT jl_unionall_t *jl_array_type;
 extern JL_DLLEXPORT jl_typename_t *jl_array_typename;
 extern JL_DLLEXPORT jl_datatype_t *jl_weakref_type;
 extern JL_DLLEXPORT jl_datatype_t *jl_string_type;
@@ -529,11 +528,11 @@ extern JL_DLLEXPORT jl_datatype_t *jl_float64_type;
 extern JL_DLLEXPORT jl_datatype_t *jl_floatingpoint_type;
 extern JL_DLLEXPORT jl_datatype_t *jl_number_type;
 extern JL_DLLEXPORT jl_datatype_t *jl_void_type;
-extern JL_DLLEXPORT jl_datatype_t *jl_complex_type;
+extern JL_DLLEXPORT jl_unionall_t *jl_complex_type;
 extern JL_DLLEXPORT jl_datatype_t *jl_signed_type;
 extern JL_DLLEXPORT jl_datatype_t *jl_voidpointer_type;
-extern JL_DLLEXPORT jl_datatype_t *jl_pointer_type;
-extern JL_DLLEXPORT jl_datatype_t *jl_ref_type;
+extern JL_DLLEXPORT jl_unionall_t *jl_pointer_type;
+extern JL_DLLEXPORT jl_unionall_t *jl_ref_type;
 
 extern JL_DLLEXPORT jl_value_t *jl_array_uint8_type;
 extern JL_DLLEXPORT jl_value_t *jl_array_any_type;
@@ -939,25 +938,19 @@ STATIC_INLINE int jl_is_array(void *v)
 STATIC_INLINE int jl_is_cpointer_type(jl_value_t *t)
 {
     return (jl_is_datatype(t) &&
-            ((jl_datatype_t*)(t))->name == jl_pointer_type->name);
+            ((jl_datatype_t*)(t))->name == ((jl_datatype_t*)jl_pointer_type->body)->name);
 }
 
 STATIC_INLINE int jl_is_abstract_ref_type(jl_value_t *t)
 {
     return (jl_is_datatype(t) &&
-            ((jl_datatype_t*)(t))->name == jl_ref_type->name);
+            ((jl_datatype_t*)(t))->name == ((jl_datatype_t*)jl_ref_type->body)->name);
 }
 
 STATIC_INLINE jl_value_t *jl_is_ref_type(jl_value_t *t)
 {
     if (!jl_is_datatype(t)) return 0;
-    jl_datatype_t *dt = (jl_datatype_t*)t;
-    while (dt != jl_any_type && dt->name != dt->super->name) {
-        if (dt->name == jl_ref_type->name)
-            return (jl_value_t*)dt;
-        dt = dt->super;
-    }
-    return 0;
+    return jl_subtype(t, jl_ref_type);
 }
 
 STATIC_INLINE int jl_is_tuple_type(void *t)
@@ -975,7 +968,7 @@ STATIC_INLINE int jl_is_vecelement_type(jl_value_t* t)
 STATIC_INLINE int jl_is_type_type(jl_value_t *v)
 {
     return (jl_is_datatype(v) &&
-            ((jl_datatype_t*)(v))->name == jl_type_type->name);
+            ((jl_datatype_t*)(v))->name == ((jl_datatype_t*)jl_type_type->body)->name);
 }
 
 // object identity

@@ -343,8 +343,8 @@ static jl_tupletype_t *join_tsig(jl_tupletype_t *tt, jl_tupletype_t *sig)
             // and the result of matching the type signature
             // needs to be corrected to the leaf type 'kind'
             jl_value_t *kind = jl_typeof(jl_tparam0(elt));
-            if (jl_subtype(kind, decl_i, 0)) {
-                if (!jl_subtype((jl_value_t*)jl_type_type, decl_i, 0)) {
+            if (jl_subtype(kind, decl_i)) {
+                if (!jl_subtype((jl_value_t*)jl_type_type, decl_i)) {
                     // TypeConstructors are problematic because they can be alternate
                     // representations of any type. If we matched this method because
                     // it matched the leaf type TypeConstructor, then don't
@@ -403,7 +403,7 @@ static void jl_cacheable_sig(
         // avoid specializing on an argument of type Tuple
         // unless matching a declared type of `::Type`
         if (jl_is_type_type(elt) && jl_is_tuple_type(jl_tparam0(elt)) &&
-            (!jl_subtype(decl_i, (jl_value_t*)jl_type_type, 0) || is_kind(decl_i))) { // Type{Tuple{...}}
+            (!jl_subtype(decl_i, (jl_value_t*)jl_type_type) || is_kind(decl_i))) { // Type{Tuple{...}}
             elt = (jl_value_t*)jl_anytuple_type_type; // Type{T<:Tuple}
             if (!*newparams) *newparams = jl_svec_copy(type->parameters);
             jl_svecset(*newparams, i, elt);
@@ -411,7 +411,7 @@ static void jl_cacheable_sig(
         }
 
         int notcalled_func = (i > 0 && i <= 8 && !(definition->called & (1 << (i - 1))) &&
-                              jl_subtype(elt, (jl_value_t*)jl_function_type, 0));
+                              jl_subtype(elt, (jl_value_t*)jl_function_type));
         if (decl_i == jl_ANY_flag) {
             // don't specialize on slots marked ANY
             if (!*newparams) *newparams = jl_svec_copy(type->parameters);
@@ -421,8 +421,8 @@ static void jl_cacheable_sig(
         else if (notcalled_func && (decl_i == (jl_value_t*)jl_any_type ||
                                     decl_i == (jl_value_t*)jl_function_type ||
                                     (jl_is_uniontype(decl_i) && jl_svec_len(((jl_uniontype_t*)decl_i)->types)==2 &&
-                                     jl_subtype((jl_value_t*)jl_function_type, decl_i, 0) &&
-                                     jl_subtype((jl_value_t*)jl_datatype_type, decl_i, 0)))) {
+                                     jl_subtype((jl_value_t*)jl_function_type, decl_i) &&
+                                     jl_subtype((jl_value_t*)jl_datatype_type, decl_i)))) {
             // and attempt to despecialize types marked Function, Callable, or Any
             // when called with a subtype of Function but is not called
             if (!*newparams) *newparams = jl_svec_copy(type->parameters);
@@ -521,8 +521,8 @@ JL_DLLEXPORT int jl_is_cacheable_sig(
             // and the result of matching the type signature
             // needs to be corrected to the leaf type 'kind'
             jl_value_t *kind = jl_typeof(jl_tparam0(elt));
-            if (kind != (jl_value_t*)jl_tvar_type && jl_subtype(kind, decl_i, 0)) {
-                if (!jl_subtype((jl_value_t*)jl_type_type, decl_i, 0)) {
+            if (kind != (jl_value_t*)jl_tvar_type && jl_subtype(kind, decl_i)) {
+                if (!jl_subtype((jl_value_t*)jl_type_type, decl_i)) {
                     return 0;
                 }
             }
@@ -530,19 +530,19 @@ JL_DLLEXPORT int jl_is_cacheable_sig(
         // avoid specializing on an argument of type Tuple
         // unless matching a declared type of `::Type`
         if (jl_is_type_type(elt) && jl_is_tuple_type(jl_tparam0(elt)) &&
-            (!jl_subtype(decl_i, (jl_value_t*)jl_type_type, 0) || is_kind(decl_i))) { // Type{Tuple{...}}
+            (!jl_subtype(decl_i, (jl_value_t*)jl_type_type) || is_kind(decl_i))) { // Type{Tuple{...}}
             if (elt != (jl_value_t*)jl_anytuple_type_type)
                 return 0;
             continue;
         }
 
         int notcalled_func = (i > 0 && i <= 8 && !(definition->called & (1 << (i - 1))) &&
-                              jl_subtype(elt, (jl_value_t*)jl_function_type, 0));
+                              jl_subtype(elt, (jl_value_t*)jl_function_type));
         if (notcalled_func && (decl_i == (jl_value_t*)jl_any_type ||
                                decl_i == (jl_value_t*)jl_function_type ||
                                (jl_is_uniontype(decl_i) && jl_svec_len(((jl_uniontype_t*)decl_i)->types)==2 &&
-                                jl_subtype((jl_value_t*)jl_function_type, decl_i, 0) &&
-                                jl_subtype((jl_value_t*)jl_datatype_type, decl_i, 0)))) {
+                                jl_subtype((jl_value_t*)jl_function_type, decl_i) &&
+                                jl_subtype((jl_value_t*)jl_datatype_type, decl_i)))) {
             // and attempt to despecialize types marked Function, Callable, or Any
             // when called with a subtype of Function but is not called
             if (elt != (jl_value_t*)jl_function_type)
@@ -569,7 +569,7 @@ JL_DLLEXPORT int jl_is_cacheable_sig(
                 assert(di != (jl_value_t*)jl_bottom_type);
                 if (is_kind(di))
                     return 0;
-                else if (!jl_subtype(di, elt, 0) || !jl_subtype(elt, di, 0))
+                else if (!jl_subtype(di, elt) || !jl_subtype(elt, di))
                     return 0;
             }
             else {
@@ -657,7 +657,7 @@ static jl_lambda_info_t *cache_method(jl_methtable_t *mt, union jl_typemap_t *ca
         size_t j = i;
         int all_are_subtypes = 1;
         for (; j < jl_svec_len(newparams); j++) {
-            if (!jl_subtype(jl_svecref(newparams, j), lasttype, 0)) {
+            if (!jl_subtype(jl_svecref(newparams, j), lasttype)) {
                 all_are_subtypes = 0;
                 break;
             }
@@ -2125,7 +2125,7 @@ static int ml_matches_visitor(jl_typemap_entry_t *ml, struct typemap_intersectio
             // which is a bigger type that would not have been a subtype of the prior
             // match (prior_ti). We simulate that for now by checking jl_has_typevars.
             if (jl_is_leaf_type(prior_ti) && !jl_has_typevars(closure->match.ti) && !jl_has_typevars(prior_ti) &&
-                jl_subtype(closure->match.ti, prior_ti, 0)) {
+                jl_subtype(closure->match.ti, prior_ti)) {
                 skip = 1;
                 break;
             }
@@ -2170,7 +2170,7 @@ static int ml_matches_visitor(jl_typemap_entry_t *ml, struct typemap_intersectio
         // NOTE: jl_subtype check added in case the intersection is
         // over-approximated.
         if (matched_all_typevars && jl_types_equal(closure->match.ti, closure->match.type) &&
-            jl_subtype(closure->match.type, (jl_value_t*)ml->sig, 0)) {
+            jl_subtype(closure->match.type, (jl_value_t*)ml->sig)) {
             done = 1; // terminate visiting method list
         }
         // here we have reached a definition that fully covers the arguments.
@@ -2208,7 +2208,7 @@ static int ml_matches_visitor(jl_typemap_entry_t *ml, struct typemap_intersectio
                         jl_value_t *ambi = jl_type_intersection_matching((jl_value_t*)ml->sig,
                                                                          (jl_value_t*)mambig->sig,
                                                                          &env, mambig->tvars);
-                        if (jl_subtype(closure->match.ti, ambi, 0)) {
+                        if (jl_subtype(closure->match.ti, ambi)) {
                             return_this_match = 0;
                             break;
                         }

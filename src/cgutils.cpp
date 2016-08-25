@@ -686,7 +686,7 @@ static void emit_typecheck(const jl_cgval_t &x, jl_value_t *type, const std::str
                            jl_codectx_t *ctx)
 {
     Value *istype;
-    // if (jl_subtype(x.typ, type, 0)) {
+    // if (jl_subtype(x.typ, type)) {
     //     // This case should already be handled by the caller
     //     return;
     // }
@@ -702,11 +702,9 @@ static void emit_typecheck(const jl_cgval_t &x, jl_value_t *type, const std::str
         istype = builder.
             CreateICmpNE(
 #ifdef LLVM37
-                builder.CreateCall(prepare_call(jlsubtype_func), { vx, literal_pointer_val(type),
-                                             ConstantInt::get(T_int32,1) }),
+                builder.CreateCall(prepare_call(jlisa_func), { vx, literal_pointer_val(type) }),
 #else
-                builder.CreateCall3(prepare_call(jlsubtype_func), vx, literal_pointer_val(type),
-                                             ConstantInt::get(T_int32,1)),
+                builder.CreateCall2(prepare_call(jlisa_func), vx, literal_pointer_val(type)),
 #endif
                          ConstantInt::get(T_int32,0));
     }
@@ -1667,7 +1665,7 @@ static jl_cgval_t emit_new_struct(jl_value_t *ty, size_t nargs, jl_value_t **arg
                 jl_value_t *jtype = jl_svecref(sty->types,i);
                 Type *fty = julia_type_to_llvm(jtype);
                 jl_cgval_t fval_info = emit_expr(args[i+1], ctx);
-                if (!jl_subtype(fval_info.typ, jtype, 0))
+                if (!jl_subtype(fval_info.typ, jtype))
                     emit_typecheck(fval_info, jtype, "new", ctx);
                 if (!type_is_ghost(fty)) {
                     Value *fval = NULL, *dest = NULL;
@@ -1712,7 +1710,7 @@ static jl_cgval_t emit_new_struct(jl_value_t *ty, size_t nargs, jl_value_t **arg
         jl_cgval_t strctinfo = mark_julia_type(strct, true, ty, ctx);
         if (f1) {
             jl_cgval_t f1info = mark_julia_type(f1, true, jl_any_type, ctx);
-            if (!jl_subtype(expr_type(args[1],ctx), jl_field_type(sty,0), 0))
+            if (!jl_subtype(expr_type(args[1],ctx), jl_field_type(sty,0)))
                 emit_typecheck(f1info, jl_field_type(sty,0), "new", ctx);
             emit_setfield(sty, strctinfo, 0, f1info, ctx, false, false);
         }
@@ -1734,7 +1732,7 @@ static jl_cgval_t emit_new_struct(jl_value_t *ty, size_t nargs, jl_value_t **arg
                 need_wb = true;
             }
             if (rhs.isboxed) {
-                if (!jl_subtype(expr_type(args[i],ctx), jl_svecref(sty->types,i-1), 0))
+                if (!jl_subtype(expr_type(args[i],ctx), jl_svecref(sty->types,i-1)))
                     emit_typecheck(rhs, jl_svecref(sty->types,i-1), "new", ctx);
             }
             if (might_need_root(args[i])) // TODO: how to remove this?

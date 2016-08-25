@@ -759,7 +759,7 @@ JL_DLLEXPORT void jl_method_def(jl_svec_t *argdata, jl_lambda_info_t *f, jl_valu
     mt = ftype->name->mt;
     name = mt->name;
 
-    if (jl_subtype((jl_value_t*)ftype, (jl_value_t*)jl_builtin_type, 0))
+    if (jl_subtype((jl_value_t*)ftype, (jl_value_t*)jl_builtin_type))
         jl_error("cannot add methods to a builtin function");
 
     m = jl_new_method(f, name, argtypes, tvars, isstaged == jl_true);

@@ -803,7 +803,7 @@ static jl_value_t *intersect_typevar(jl_tvar_t *a, jl_value_t *b,
     jl_value_t *both=NULL;
     jl_tvar_t *new_b=NULL;
     JL_GC_PUSH3(&b, &both, &new_b);
-    if (jl_subtype(b, (jl_value_t*)a, 0)) {
+    if (jl_subtype(b, (jl_value_t*)a)) {
         if (!is_bnd(a,penv)) {
             JL_GC_POP();
             return b;
@@ -815,7 +815,7 @@ static jl_value_t *intersect_typevar(jl_tvar_t *a, jl_value_t *b,
         JL_GC_POP();
         return (jl_value_t*)jl_bottom_type;
     }
-    else if (jl_subtype((jl_value_t*)a, b, 0)) {
+    else if (jl_subtype((jl_value_t*)a, b)) {
         /*
           TODO: get sharper types when the overlap between a typevar and
           a type is not simple. Ex:
@@ -976,9 +976,9 @@ static jl_value_t *jl_type_intersect(jl_value_t *a, jl_value_t *b,
     if (a == (jl_value_t*)jl_bottom_type || b == (jl_value_t*)jl_bottom_type)
         return (jl_value_t*)jl_bottom_type;
     if (!jl_has_typevars(a) && !jl_has_typevars(b)) {
-        if (jl_subtype(a, b, 0))
+        if (jl_subtype(a, b))
             return a;
-        if (jl_subtype(b, a, 0))
+        if (jl_subtype(b, a))
             return b;
     }
     // union
@@ -1234,7 +1234,7 @@ static jl_value_t *meet_tvars(jl_tvar_t *a, jl_tvar_t *b)
     JL_GC_PUSH2(&lb, &ub);
     lb = (jl_value_t*)jl_svec2(a->lb, b->lb);
     lb = jl_type_union((jl_svec_t*)lb);
-    if (!jl_subtype(lb, ub, 0)) {
+    if (!jl_subtype(lb, ub)) {
         JL_GC_POP();
         return (jl_value_t*)jl_bottom_type;
     }
@@ -1254,14 +1254,14 @@ static jl_value_t *meet_tvar(jl_tvar_t *tv, jl_value_t *ty)
         return (jl_value_t*)meet_tvars(tv, (jl_tvar_t*)ty);
     //if (jl_types_equal((jl_value_t*)tv->ub, ty))
     //    return ty;
-    if (jl_subtype((jl_value_t*)tv->ub, ty, 0))
+    if (jl_subtype((jl_value_t*)tv->ub, ty))
         return (jl_value_t*)tv;
     // TODO: should we check type_intersection(tv->ub, ty) instead?
-    if (!jl_subtype(ty, (jl_value_t*)tv->ub, 0))
+    if (!jl_subtype(ty, (jl_value_t*)tv->ub))
         return (jl_value_t*)jl_bottom_type;
     //if (jl_types_equal((jl_value_t*)tv->lb, ty))
     //    return ty;
-    if (jl_subtype((jl_value_t*)tv->lb, ty, 0)) {
+    if (jl_subtype((jl_value_t*)tv->lb, ty)) {
         if (jl_is_leaf_type(ty) || !jl_is_type(ty))
             return ty;
         jl_tvar_t *ntv = jl_new_typevar(underscore_sym, tv->lb, ty);
@@ -1293,8 +1293,8 @@ static jl_value_t *meet(jl_value_t *X, jl_value_t *Y, variance_t var)
             return NULL;
         return tv;
     }
-    if (jl_subtype(X,Y,0)) return X;
-    if (jl_subtype(Y,X,0)) return Y;
+    if (jl_subtype(X,Y)) return X;
+    if (jl_subtype(Y,X)) return Y;
     jl_value_t *v = jl_type_intersection(X, Y);
     return (v == (jl_value_t*)jl_bottom_type ?  NULL : v);
 }
@@ -1660,7 +1660,7 @@ jl_value_t *jl_type_intersection_matching(jl_value_t *a, jl_value_t *b,
 
 static int extensionally_same_type(jl_value_t *a, jl_value_t *b)
 {
-    return jl_subtype(a, b, 0) && jl_subtype(b, a, 0);
+    return jl_subtype(a, b) && jl_subtype(b, a);
 }
 
 static int type_eqv__(jl_value_t *a, jl_value_t *b, int distinguish_tctor)
@@ -2013,7 +2013,7 @@ jl_value_t *jl_apply_type(jl_value_t *tc, jl_value_t **params, size_t n)
 
         if (!valid_type_param(pi)) {
             jl_type_error_rt("type", "parameter",
-                             jl_subtype(pi, (jl_value_t*)jl_number_type, 1) ?
+                             jl_isa(pi, (jl_value_t*)jl_number_type) ?
                              (jl_value_t*)jl_long_type : (jl_value_t*)jl_type_type,
                              pi);
         }
@@ -2418,7 +2418,7 @@ static jl_value_t *inst_type_w_(jl_value_t *t, jl_typeenv_t *env, jl_typestack_t
         while (e != NULL) {
             if (e->var == (jl_tvar_t*)t) {
                 jl_value_t *val = e->val;
-                if (check && !jl_is_typevar(val) && !jl_subtype(val, t, 0)) {
+                if (check && !jl_is_typevar(val) && !jl_subtype(val, t)) {
                     jl_type_error_rt("type parameter",
                                      jl_symbol_name(((jl_tvar_t*)t)->name), t, val);
                 }
@@ -2494,7 +2494,7 @@ static jl_value_t *inst_type_w_(jl_value_t *t, jl_typeenv_t *env, jl_typestack_t
         iparams[i] = (jl_value_t*)inst_type_w_(elt, env, stack, check);
         /*
         if (jl_is_typevar(tv) && !jl_is_typevar(iparams[i])) {
-            if (!jl_subtype(iparams[i], tv, 0)) {
+            if (!jl_subtype(iparams[i], tv)) {
                 jl_type_error_rt(jl_symbol_name(tt->name->name),
                                  jl_symbol_name(((jl_tvar_t*)tv)->name),
                                  tv, iparams[i]);
@@ -3060,7 +3060,7 @@ static jl_value_t *type_match_(jl_value_t *child, jl_value_t *parent,
                     else if (!jl_is_typevar(child) && !jl_type_morespecific_(pv, child, 0)) {
                         return jl_true;
                     }
-                    else if (jl_subtype(pv, child, 0)) {
+                    else if (jl_subtype(pv, child)) {
                         env->data[i+1] = (jl_value_t*)child;
                         return jl_true;
                     }

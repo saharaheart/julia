@@ -964,8 +964,7 @@ JL_CALLABLE(jl_f_apply_type)
     JL_NARGSV(apply_type, 1);
     if (!jl_is_unionall(args[0]) && args[0] != (jl_value_t*)jl_anytuple_type &&
         args[0] != (jl_value_t*)jl_uniontype_type)
-        jl_type_error("Type{...} expression", (jl_value_t*)jl_type_type, args[0]);
-    }
+        jl_type_error("Type{...} expression", (jl_value_t*)jl_unionall_type, args[0]);
     return jl_apply_type(args[0], &args[1], nargs-1);
 }
 

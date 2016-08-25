@@ -105,7 +105,7 @@ static int equiv_svec_dt(jl_svec_t *sa, jl_svec_t *sb)
             return 0;
         if (jl_is_typevar(a) && ((jl_tvar_t*)a)->name != ((jl_tvar_t*)b)->name)
             return 0;
-        if (!jl_subtype(a, b, 0) || !jl_subtype(b, a, 0))
+        if (!jl_subtype(a, b) || !jl_subtype(b, a))
             return 0;
     }
     return 1;
@@ -120,8 +120,8 @@ static int equiv_type(jl_datatype_t *dta, jl_datatype_t *dtb)
             dta->ninitialized == dtb->ninitialized &&
             equiv_svec_dt(dta->parameters, dtb->parameters) &&
             equiv_svec_dt(dta->types, dtb->types) &&
-            jl_subtype((jl_value_t*)dta->super, (jl_value_t*)dtb->super, 0) &&
-            jl_subtype((jl_value_t*)dtb->super, (jl_value_t*)dta->super, 0) &&
+            jl_subtype((jl_value_t*)dta->super, (jl_value_t*)dtb->super) &&
+            jl_subtype((jl_value_t*)dtb->super, (jl_value_t*)dta->super) &&
             jl_egal((jl_value_t*)dta->name->names, (jl_value_t*)dtb->name->names));
 }
 
@@ -139,9 +139,9 @@ void jl_set_datatype_super(jl_datatype_t *tt, jl_value_t *super)
 {
     if (!jl_is_datatype(super) || !jl_is_abstracttype(super) ||
         tt->name == ((jl_datatype_t*)super)->name ||
-        jl_subtype(super,(jl_value_t*)jl_vararg_type,0) ||
+        jl_subtype(super,(jl_value_t*)jl_vararg_type) ||
         jl_is_tuple_type(super) ||
-        jl_subtype(super,(jl_value_t*)jl_type_type,0) ||
+        jl_subtype(super,(jl_value_t*)jl_type_type) ||
         super == (jl_value_t*)jl_builtin_type) {
         jl_errorf("invalid subtyping in definition of %s",
                   jl_symbol_name(tt->name->name));
