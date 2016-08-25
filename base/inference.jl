@@ -50,6 +50,8 @@ type InferenceState
     # info on the state of inference and the linfo
     linfo::LambdaInfo
     world::UInt
+    min_valid::UInt
+    max_valid::UInt
     nargs::Int
     stmt_types::Vector{Any}
     # return type
@@ -67,8 +69,9 @@ type InferenceState
     # call-graph edges connecting from a caller to a callee (and back)
     # we shouldn't need to iterate edges very often, so we use it to optimize the lookup from edge -> linenum
     # whereas backedges is optimized for iteration
-    edges::ObjectIdDict #Dict{InferenceState, Vector{LineNum}}
+    edges::ObjectIdDict # a Dict{InferenceState, Vector{LineNum}}
     backedges::Vector{Tuple{InferenceState, Vector{LineNum}}}
+    li_edges::Vector{Any} # a Set{LambdaInfo}
     # iteration fixed-point detection
     fixedpoint::Bool
     inworkq::Bool
@@ -155,20 +158,48 @@ type InferenceState
         W = IntSet()
         push!(W, 1) #initial pc to visit
 
-        inmodule = isdefined(linfo, :def) ? linfo.def.module : current_module() # toplevel thunks are inferred in the current module
+        if isdefined(linfo, :def)
+            meth = linfo.def
+            min_valid = min_age(meth)
+            max_valid = max_age(meth)
+            inmodule = meth.module
+        else
+            min_valid = 0
+            max_valid = typemax(UInt)
+            inmodule = current_module() # toplevel thunks are inferred in the current module
+        end
         frame = new(
             sp, nl, inmodule, 0,
-            linfo, world, la, s, Union{}, W, n,
+            linfo, world, min_valid, max_valid,
+            la, s, Union{}, W, n,
             cur_hand, handler_at, n_handlers,
             ssavalue_uses, ssavalue_init,
-            ObjectIdDict(), #Dict{InferenceState, Vector{LineNum}}(),
+            ObjectIdDict(), # Dict{InferenceState, Vector{LineNum}}(),
             Vector{Tuple{InferenceState, Vector{LineNum}}}(),
+            Vector{Any}(), # Set{LambdaInfo}()
             false, false, optimize, inlining, needtree, false)
         push!(active, frame)
         nactive[] += 1
         return frame
     end
 end
+
+# TODO: track the worlds for which this InferenceState
+# is being used, and split it if the WIP requires it
+function update_valid_ages!(sv::InferenceState)
+    if isdefined(sv.linfo, :backedges)
+        min_valid = sv.min_valid
+        max_valid = sv.max_valid
+        for li in sv.li_edges
+            li = li::LambdaInfo
+            min_valid = max(min_valid, min_age(li.def))
+            max_valid = min(max_valid, max_age(li.def))
+        end
+        sv.min_valid = min_valid
+        sv.max_valid = max_valid
+    end
+end
+
 
 #### current global inference state ####
 
@@ -1416,7 +1447,7 @@ function newvar!(sv::InferenceState, typ)
 end
 
 # create a specialized LambdaInfo from a method
-function specialize_method(method::Method, types::ANY, sp::SimpleVector, cached, world)
+function specialize_method(method::Method, types::ANY, sp::SimpleVector, cached::Bool, world::UInt)
     if cached
         return ccall(:jl_specializations_get_linfo, Ref{LambdaInfo}, (Any, Any, Any, UInt), method, types, sp, world)
     else
@@ -1442,12 +1473,15 @@ end
 inlining_enabled() = (JLOptions().can_inline == 1)
 
 #### entry points for inferring a LambdaInfo given a type signature ####
-function add_backedge(li::LambdaInfo, caller::LambdaInfo)
+function add_backedge(li::LambdaInfo, sv::InferenceState)
+    caller = sv.linfo
     isdefined(caller, :def) || return # don't add backedges to toplevel exprs
     isdefined(li, :backedges) || (li.backedges = []) # lazy-init the backedges array
     in(caller, li.backedges) || push!(li.backedges, caller) # add a backedge from callee to caller
+    in(li, sv.li_edges) || push!(sv.li_edges, li) # add a forward edge from caller to callee
     nothing
 end
+
 function typeinf_edge(method::Method, atypes::ANY, sparams::SimpleVector, needtree::Bool, optimize::Bool, cached::Bool, caller, world::UInt)
     local code = nothing
     local frame = nothing
@@ -1466,7 +1500,7 @@ function typeinf_edge(method::Method, atypes::ANY, sparams::SimpleVector, needtr
             elseif isa(code, LambdaInfo)
                 # something existing
                 if code.inferred && !(needtree && code.code === nothing)
-                    isa(caller, InferenceState) && add_backedge(code, caller.linfo)
+                    isa(caller, InferenceState) && add_backedge(code, caller::InferenceState)
                     return (code, code.rettype, true)
                 end
             else
@@ -1580,7 +1614,7 @@ function typeinf_edge(method::Method, atypes::ANY, sparams::SimpleVector, needtr
         end
     end
     typeinf_loop(frame)
-    isa(caller, InferenceState) && add_backedge(linfo, caller.linfo)
+    isa(caller, InferenceState) && add_backedge(linfo, caller::InferenceState)
     ccall(:jl_typeinf_end, Void, ())
     return (frame.linfo, widenconst(frame.bestguess), frame.inferred)
 end
@@ -1840,11 +1874,14 @@ function typeinf_frame(frame)
         if finished
             finish(frame)
         else # fixedpoint propagation
-            for (i,_) in frame.edges
+            for (i, _) in frame.edges
                 i = i::InferenceState
+                update_valid_ages!(i) # converge age at the same time
                 if !i.fixedpoint
-                    i.inworkq || push!(workq, i)
-                    i.inworkq = true
+                    if !i.inworkq
+                        push!(workq, i)
+                        i.inworkq = true
+                    end
                     i.fixedpoint = true
                 end
             end
@@ -1983,15 +2020,9 @@ function finish(me::InferenceState)
         me.linfo.inlineable = false
     end
 
-    if isdefined(me.linfo, :backedges)
-        min_valid = min_age(me.linfo.def)
-        max_valid = max_age(me.linfo.def)
-        for li in me.linfo.backedges
-            li = li::LambdaInfo
-            min_valid = max(min_valid, min_age(li.def))
-            max_valid = min(max_valid, max_age(li.def))
-        end
-    end
+    update_valid_ages!(me)
+    ccall(:jl_specialization_set_world, Void, (Any, UInt, UInt),
+          me.linfo, me.min_valid, me.max_valid)
 
     me.linfo.inferred = true
     me.linfo.inInference = false
@@ -2582,7 +2613,7 @@ function inlineable(f::ANY, ft::ANY, e::Expr, atypes::Vector{Any}, sv::Inference
     if linfo === nothing || !inferred || !linfo.inlineable || (ast = linfo.code) === nothing
         return invoke_NF()
     end
-    add_backedge(linfo, enclosing)
+    add_backedge(linfo, sv)
 
     spvals = Any[]
     for i = 1:length(methsp)
