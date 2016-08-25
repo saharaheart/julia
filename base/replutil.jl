@@ -204,8 +204,8 @@ function showerror(io::IO, ex, bt; backtrace=true)
             backtrace_str = takebuf_string(io_bt)
             # Only print the backtrace header if there actually is a printed backtrace
             if backtrace_str != ""
-                header = string(typeof(ex).name.name)
-                line_len = 76
+                header = string(typeof(ex).name.name, " ")
+                line_len = min(90, Base.Terminals.width(Base.active_repl.t))
                 print_with_color(default_color_warn, io, "-"^line_len * "\n", header)
                 print(io, lpad("Stacktrace (most recent call last)", line_len - strwidth(header), ' '))
                 print(io, backtrace_str, "\n")

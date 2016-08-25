@@ -110,9 +110,6 @@ function ip_matches_func(ip, func::Symbol)
     return false
 end
 
-error_file_color = :green
-error_funcdef_color = :yellow
-
 function display_error(io::IO, er, bt)
     legacy_errs = haskey(ENV, "LEGACY_ERRORS")
     Base.with_output_color(legacy_errs ? :red : :nothing, io) do io
