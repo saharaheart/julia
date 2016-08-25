@@ -253,8 +253,8 @@ typedef struct _jl_lambda_info_t {
     jl_value_t *slottypes;
     jl_value_t *ssavaluetypes;  // types of ssa values
     jl_array_t *slotnames; // names of local variables
-    jl_array_t *slotflags;  // local var bit flags
-    jl_array_t *backedges;  // backedges
+    jl_array_t *slotflags; // local var bit flags
+    jl_array_t *backedges;
     struct _jl_lambda_info_t *unspecialized_ducttape; // if template can't be compiled due to intrinsics, an un-inferred executable copy may get stored here
     jl_method_t *def; // method this is specialized from, (null if this is a toplevel thunk)
     jl_value_t *constval;  // value of the function if jlcall_api==2
@@ -449,6 +449,7 @@ typedef struct _jl_methtable_t {
     intptr_t max_args;  // max # of non-vararg arguments in a signature
     jl_value_t *kwsorter;  // keyword argument sorter function
     jl_module_t *module; // used for incremental serialization to locate original binding
+    jl_array_t *backedges;
     jl_mutex_t writelock;
 } jl_methtable_t;
 
