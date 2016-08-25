@@ -206,16 +206,17 @@ tt_cons(t::ANY, tup::ANY) = (@_pure_meta; Tuple{t, (isa(tup, Type) ? tup.paramet
 
 Returns an array of lowered ASTs for the methods matching the given generic function and type signature.
 """
-code_lowered(f, t::ANY=Tuple) = map(m -> (m::Method).lambda_template, methods(f, t))
+code_lowered(f::ANY, t::ANY=Tuple) = map(m -> (m::Method).lambda_template, methods(f, t))
 
 # low-level method lookup functions used by the compiler
 
-function _methods(f::ANY,t::ANY,lim)
+function _methods(f::ANY, t::ANY, lim::Int, world::UInt)
     ft = isa(f,Type) ? Type{f} : typeof(f)
     tt = isa(t,Type) ? Tuple{ft, t.parameters...} : Tuple{ft, t...}
-    return _methods_by_ftype(tt, lim)
+    return _methods_by_ftype(tt, lim, world)
 end
-function _methods_by_ftype(t::ANY, lim)
+
+function _methods_by_ftype(t::ANY, lim::Int, world::UInt)
     tp = t.parameters::SimpleVector
     nu = 1
     for ti in tp
@@ -224,14 +225,16 @@ function _methods_by_ftype(t::ANY, lim)
         end
     end
     if 1 < nu <= 64
-        return _methods(Any[tp...], length(tp), lim, [])
+        return _methods(Any[tp...], length(tp), lim, [], world)
     end
     # XXX: the following can return incorrect answers that the above branch would have corrected
-    return ccall(:jl_matching_methods, Any, (Any,Cint,Cint), t, lim, 0)
+    return ccall(:jl_matching_methods, Any, (Any, Cint, Cint, UInt), t, lim, 0, world)
 end
-function _methods(t::Array,i,lim::Integer,matching::Array{Any,1})
+
+function _methods(t::Array, i, lim::Integer, matching::Array{Any, 1}, world::UInt)
     if i == 0
-        new = ccall(:jl_matching_methods, Any, (Any,Cint,Cint), Tuple{t...}, lim, 0)
+        world = typemax(UInt)
+        new = ccall(:jl_matching_methods, Any, (Any, Cint, Cint, UInt), Tuple{t...}, lim, 0, world)
         new === false && return false
         append!(matching, new::Array{Any,1})
     else
@@ -239,14 +242,14 @@ function _methods(t::Array,i,lim::Integer,matching::Array{Any,1})
         if isa(ti, Union)
             for ty in (ti::Union).types
                 t[i] = ty
-                if _methods(t,i-1,lim,matching) === false
+                if _methods(t, i - 1, lim, matching, world) === false
                     t[i] = ti
                     return false
                 end
             end
             t[i] = ti
         else
-            return _methods(t,i-1,lim,matching)
+            return _methods(t, i - 1, lim, matching, world)
         end
     end
     return matching
@@ -279,7 +282,8 @@ function methods(f::ANY, t::ANY)
         throw(ArgumentError("argument is not a generic function"))
     end
     t = to_tuple_type(t)
-    return MethodList(Method[m[3] for m in _methods(f,t,-1)], typeof(f).name.mt)
+    world = typemax(UInt)
+    return MethodList(Method[m[3] for m in _methods(f, t, -1, world)], typeof(f).name.mt)
 end
 
 methods(f::Core.Builtin) = MethodList(Method[], typeof(f).name.mt)
@@ -287,7 +291,8 @@ methods(f::Core.Builtin) = MethodList(Method[], typeof(f).name.mt)
 function methods_including_ambiguous(f::ANY, t::ANY)
     ft = isa(f,Type) ? Type{f} : typeof(f)
     tt = isa(t,Type) ? Tuple{ft, t.parameters...} : Tuple{ft, t...}
-    ms = ccall(:jl_matching_methods, Any, (Any,Cint,Cint), tt, -1, 1)::Array{Any,1}
+    world = typemax(UInt)
+    ms = ccall(:jl_matching_methods, Any, (Any, Cint, Cint, UInt), tt, -1, 1, world)::Array{Any,1}
     return MethodList(Method[m[3] for m in ms], typeof(f).name.mt)
 end
 
@@ -428,7 +433,8 @@ function code_typed(f::ANY, types::ANY=Tuple; optimize=true)
     end
     types = to_tuple_type(types)
     asts = []
-    for x in _methods(f,types,-1)
+    world = typemax(UInt)
+    for x in _methods(f, types, -1, world)
         linfo = func_for_method_checked(x[3], types)
         if optimize
             (li, ty, inf) = Core.Inference.typeinf(linfo, x[1], x[2], true)
@@ -448,7 +454,8 @@ function return_types(f::ANY, types::ANY=Tuple)
     end
     types = to_tuple_type(types)
     rt = []
-    for x in _methods(f,types,-1)
+    world = typemax(UInt)
+    for x in _methods(f, types, -1, world)
         linfo = func_for_method_checked(x[3], types)
         (_li, ty, inf) = Core.Inference.typeinf(linfo, x[1], x[2])
         inf || error("inference not successful") # Inference disabled
@@ -564,4 +571,9 @@ function isambiguous(m1::Method, m2::Method)
         end
     end
     return true
+end
+
+let _min_age = Symbol("min-age"), _max_age = Symbol("max-age")
+    global min_age(m::Method) = reinterpret(UInt, getfield(m, _min_age))
+    global max_age(m::Method) = reinterpret(UInt, getfield(m, _max_age))
 end

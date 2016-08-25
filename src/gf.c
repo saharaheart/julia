@@ -30,6 +30,11 @@ JL_DLLEXPORT size_t jl_get_world_counter(void)
     return jl_world_counter;
 }
 
+JL_DLLEXPORT size_t jl_get_tls_world_age(void)
+{
+    return jl_get_ptls_states()->world_age;
+}
+
 JL_DLLEXPORT jl_value_t *jl_invoke(jl_lambda_info_t *meth, jl_value_t **args, uint32_t nargs)
 {
     return jl_call_method_internal(meth, args, nargs);
@@ -382,7 +387,8 @@ static jl_tupletype_t *join_tsig(jl_tupletype_t *tt, jl_tupletype_t *sig)
 }
 
 static jl_value_t *ml_matches(union jl_typemap_t ml, int offs,
-                              jl_tupletype_t *type, int lim, int include_ambiguous);
+                              jl_tupletype_t *type, int lim, int include_ambiguous,
+                              size_t world);
 
 static void jl_cacheable_sig(
     jl_tupletype_t *const type, // the specialized type signature for type lambda
@@ -718,7 +724,7 @@ static jl_lambda_info_t *cache_method(jl_methtable_t *mt, union jl_typemap_t *ca
         temp2 = (jl_value_t*)type;
     }
     if (need_guard_entries) {
-        temp = ml_matches(mt->defs, 0, type, -1, 0); // TODO: use MAX_UNSPECIALIZED_CONFLICTS?
+        temp = ml_matches(mt->defs, 0, type, -1, 0, 0); // TODO: use MAX_UNSPECIALIZED_CONFLICTS?
         int guards = 0;
         if (temp == jl_false) {
             cache_with_orig = 1;
@@ -1279,7 +1285,24 @@ static jl_lambda_info_t *jl_get_unspecialized(jl_lambda_info_t *method)
     return def->lambda_template;
 }
 
-JL_DLLEXPORT jl_value_t *jl_matching_methods(jl_tupletype_t *types, int lim, int include_ambiguous);
+// return a Vector{Any} of svecs, each describing a method match:
+// Any[svec(tt, spvals, m), ...]
+// tt is the intersection of the type argument and the method signature,
+// spvals is any matched static parameter values, m is the Method,
+//
+// lim is the max # of methods to return. if there are more, returns jl_false.
+// -1 for no limit.
+JL_DLLEXPORT jl_value_t *jl_matching_methods(jl_tupletype_t *types, int lim, int include_ambiguous, size_t world)
+{
+    assert(jl_nparams(types) > 0);
+    if (jl_tparam0(types) == jl_bottom_type)
+        return (jl_value_t*)jl_alloc_vec_any(0);
+    assert(jl_is_datatype(jl_tparam0(types)));
+    jl_methtable_t *mt = ((jl_datatype_t*)jl_tparam0(types))->name->mt;
+    if (mt == NULL)
+        return (jl_value_t*)jl_alloc_vec_any(0);
+    return ml_matches(mt->defs, 0, types, lim, include_ambiguous, world);
+}
 
 jl_lambda_info_t *jl_compile_for_dispatch(jl_lambda_info_t *li, size_t world)
 {
@@ -1373,7 +1396,7 @@ jl_lambda_info_t *jl_get_specialization1(jl_tupletype_t *types, size_t world)
         // might match. also be conservative with tuples rather than trying
         // to analyze them in detail.
         if (ti == (jl_value_t*)jl_datatype_type || jl_is_tuple_type(ti)) {
-            jl_value_t *matches = jl_matching_methods(types, 1, 0);
+            jl_value_t *matches = jl_matching_methods(types, 1, 0, world);
             if (matches == jl_false)
                 return NULL;
             break;
@@ -2131,13 +2154,15 @@ struct ml_matches_env {
     jl_svec_t *matc;   // current working svec
     int lim;
     int include_ambiguous;  // whether ambiguous matches should be included
+    size_t world;
 };
 static int ml_matches_visitor(jl_typemap_entry_t *ml, struct typemap_intersection_env *closure0)
 {
     struct ml_matches_env *closure = container_of(closure0, struct ml_matches_env, match);
     int i;
-    if (ml->max_world != ~(size_t)0)
-        return 1; // ignore replaced methods
+    if (closure->world != 0) // use zero as a flag value for returning all matches
+        if (closure->world < ml->min_world || closure->world > ml->max_world)
+            return 1; // ignore method table entries that are not part of this world
     // a method is shadowed if type <: S <: m->sig where S is the
     // signature of another applicable method
     /*
@@ -2277,7 +2302,8 @@ static int ml_matches_visitor(jl_typemap_entry_t *ml, struct typemap_intersectio
 // Returns a match as an array of svec(argtypes, static_params, Method).
 // See below for the meaning of lim.
 static jl_value_t *ml_matches(union jl_typemap_t defs, int offs,
-                              jl_tupletype_t *type, int lim, int include_ambiguous)
+                              jl_tupletype_t *type, int lim, int include_ambiguous,
+                              size_t world)
 {
     size_t l = jl_svec_len(type->parameters);
     jl_value_t *va = NULL;
@@ -2298,29 +2324,11 @@ static jl_value_t *ml_matches(union jl_typemap_t defs, int offs,
     env.matc = NULL;
     env.lim = lim;
     env.include_ambiguous = include_ambiguous;
+    env.world = world;
     JL_GC_PUSH4(&env.t, &env.matc, &env.match.env, &env.match.ti);
     jl_typemap_intersection_visitor(defs, offs, &env.match);
     JL_GC_POP();
     return env.t;
-}
-
-// return a Vector{Any} of svecs, each describing a method match:
-// Any[svec(tt, spvals, m), ...]
-// tt is the intersection of the type argument and the method signature,
-// spvals is any matched static parameter values, m is the Method,
-//
-// lim is the max # of methods to return. if there are more, returns jl_false.
-// -1 for no limit.
-JL_DLLEXPORT jl_value_t *jl_matching_methods(jl_tupletype_t *types, int lim, int include_ambiguous)
-{
-    assert(jl_nparams(types) > 0);
-    if (jl_tparam0(types) == jl_bottom_type)
-        return (jl_value_t*)jl_alloc_vec_any(0);
-    assert(jl_is_datatype(jl_tparam0(types)));
-    jl_methtable_t *mt = ((jl_datatype_t*)jl_tparam0(types))->name->mt;
-    if (mt == NULL)
-        return (jl_value_t*)jl_alloc_vec_any(0);
-    return ml_matches(mt->defs, 0, types, lim, include_ambiguous);
 }
 
 // TODO: separate the codegen and typeinf locks

@@ -752,7 +752,7 @@ end
 
 #### recursing into expression ####
 
-function abstract_call_gf_by_type(f::ANY, argtype::ANY, sv)
+function abstract_call_gf_by_type(f::ANY, argtype::ANY, sv::InferenceState)
     tm = _topmod(sv)
     # don't consider more than N methods. this trades off between
     # compiler performance and generated code performance.
@@ -763,7 +763,7 @@ function abstract_call_gf_by_type(f::ANY, argtype::ANY, sv)
     # here I picked 4.
     argtype = limit_tuple_type(argtype)
     argtypes = argtype.parameters
-    applicable = _methods_by_ftype(argtype, 4)
+    applicable = _methods_by_ftype(argtype, 4, sv.world)
     rettype = Bottom
     if is(applicable, false)
         # this means too many methods matched
@@ -944,7 +944,7 @@ function abstract_apply(af::ANY, fargs, aargtypes::Vector{Any}, vtypes::VarTable
     return abstract_call(af, (), Any[type_typeof(af), Vararg{Any}], vtypes, sv)
 end
 
-function pure_eval_call(f::ANY, argtypes::ANY, atype, vtypes, sv)
+function pure_eval_call(f::ANY, argtypes::ANY, atype, vtypes, sv::InferenceState)
     for a in drop(argtypes,1)
         if !(isa(a,Const) || (isType(a) && !has_typevars(a.parameters[1])))
             return false
@@ -970,7 +970,7 @@ function pure_eval_call(f::ANY, argtypes::ANY, atype, vtypes, sv)
         end
     end
 
-    meth = _methods_by_ftype(atype, 1)
+    meth = _methods_by_ftype(atype, 1, sv.world)
     if meth === false || length(meth) != 1
         return false
     end
@@ -1442,10 +1442,6 @@ end
 inlining_enabled() = (JLOptions().can_inline == 1)
 
 #### entry points for inferring a LambdaInfo given a type signature ####
-let _min_age = Symbol("min-age"), _max_age = Symbol("max-age")
-    global min_age(m::Method) = getfield(m, _min_age) % UInt
-    global max_age(m::Method) = getfield(m, _max_age) % UInt
-end
 function add_backedge(li::LambdaInfo, caller::LambdaInfo)
     isdefined(caller, :def) || return # don't add backedges to toplevel exprs
     isdefined(li, :backedges) || (li.backedges = []) # lazy-init the backedges array
@@ -1987,6 +1983,16 @@ function finish(me::InferenceState)
         me.linfo.inlineable = false
     end
 
+    if isdefined(me.linfo, :backedges)
+        min_valid = min_age(me.linfo.def)
+        max_valid = max_age(me.linfo.def)
+        for li in me.linfo.backedges
+            li = li::LambdaInfo
+            min_valid = max(min_valid, min_age(li.def))
+            max_valid = min(max_valid, max_age(li.def))
+        end
+    end
+
     me.linfo.inferred = true
     me.linfo.inInference = false
     # finalize and record the linfo result
@@ -2511,7 +2517,7 @@ function inlineable(f::ANY, ft::ANY, e::Expr, atypes::Vector{Any}, sv::Inference
     else
         atype = atype_unlimited
     end
-    meth = _methods_by_ftype(atype, 1)
+    meth = _methods_by_ftype(atype, 1, sv.world)
     if meth === false || length(meth) != 1
         return invoke_NF()
     end
@@ -3525,8 +3531,9 @@ function reindex_labels!(linfo::LambdaInfo, sv::InferenceState)
 end
 
 function return_type(f::ANY, t::ANY)
+    world = ccall(:jl_get_tls_world_age, UInt, ())
     rt = Union{}
-    for m in _methods(f, t, -1)
+    for m in _methods(f, t, -1, world)
         _, ty, inferred = typeinf(m[3], m[1], m[2], false)
         !inferred && return Any
         rt = tmerge(rt, ty)
@@ -3540,9 +3547,9 @@ end
 # make sure that typeinf is executed before turning on typeinf_ext
 # this ensures that typeinf_ext doesn't recurse before it can add the item to the workq
 
-for m in _methods_by_ftype(Tuple{typeof(typeinf_loop), Vararg{Any}}, 10)
+for m in _methods_by_ftype(Tuple{typeof(typeinf_loop), Vararg{Any}}, 10, typemax(UInt))
     typeinf(m[3], m[1], m[2], true)
 end
-for m in _methods_by_ftype(Tuple{typeof(typeinf_edge), Vararg{Any}}, 10)
+for m in _methods_by_ftype(Tuple{typeof(typeinf_edge), Vararg{Any}}, 10, typemax(UInt))
     typeinf(m[3], m[1], m[2], true)
 end
