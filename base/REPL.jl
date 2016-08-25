@@ -122,7 +122,7 @@ function display_error(io::IO, er, bt)
         if eval_ind != 0
             bt = bt[1:eval_ind-1]
         end
-        Base.showerror(IOContext(io, :REPLError => !legacy_errs), er, bt)
+        showerror(IOContext(io, :REPLError => !legacy_errs), er, bt)
     end
 end
 

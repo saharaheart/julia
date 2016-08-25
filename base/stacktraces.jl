@@ -201,17 +201,14 @@ function show_spec_linfo(io::IO, frame::StackFrame)
 end
 
 function show(io::IO, frame::StackFrame; full_path::Bool=false)
-    print(io, " in ")
-    col = get(io, :REPLError, false)  ? Base.REPL.error_funcdef_color : :nothing
-    Base.with_output_color(col, io) do io
-        show_spec_linfo(io, frame)
-    end
+    isreplerror = get(io, :REPLError, false)
+    isreplerror ? print_with_color(:bold, io, " — ") : print(io, " at ")
+    show_spec_linfo(io, frame)
     if frame.file !== empty_sym
         file_info = full_path ? string(frame.file) : basename(string(frame.file))
-        get(io, :REPLError, false) && print(io, "\n    ⌙")
+        isreplerror && print(io, "\n    ⌙")
         print(io, " at ")
-        col = get(io, :REPLError, false)  ? Base.REPL.error_file_color : :nothing
-        Base.with_output_color(col, io) do io
+        Base.with_output_color(isreplerror ? Base.err_linfo_color() : :nothing, io) do io
             print(io, file_info, ":")
             if frame.line >= 0
                 print(io, frame.line)

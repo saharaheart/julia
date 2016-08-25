@@ -1008,33 +1008,36 @@ function show_unquoted(io::IO, ex::Expr, indent::Int, prec::Int)
     nothing
 end
 
+# print a method signature tuple for a lambda definition
 function show_lambda_types(io::IO, li::LambdaInfo)
-    # print a method signature tuple for a lambda definition
-    if li.specTypes === Tuple
-        print(io, li.def.name, "(...)")
-        return
-    end
-
-    sig = li.specTypes.parameters
-    ft = sig[1]
-    if ft <: Function && isempty(ft.parameters) &&
-            isdefined(ft.name.module, ft.name.mt.name) &&
-            ft == typeof(getfield(ft.name.module, ft.name.mt.name))
-        print(io, ft.name.mt.name)
-    elseif isa(ft, DataType) && is(ft.name, Type.name) && isleaftype(ft)
-        f = ft.parameters[1]
-        print(io, f)
-    else
-        print(io, "(::", ft, ")")
+    isreplerror = get(io, :REPLError, false)
+    local sig
+    Base.with_output_color(isreplerror  ? err_funcdef_color() : :nothing, io) do io
+        if li.specTypes === Tuple
+            print(io, li.def.name, "(...)")
+            return
+        end
+        sig = li.specTypes.parameters
+        ft = sig[1]
+        if ft <: Function && isempty(ft.parameters) &&
+                isdefined(ft.name.module, ft.name.mt.name) &&
+                ft == typeof(getfield(ft.name.module, ft.name.mt.name))
+            print(io, ft.name.mt.name)
+        elseif isa(ft, DataType) && is(ft.name, Type.name) && isleaftype(ft)
+            f = ft.parameters[1]
+            print(io, f)
+        else
+            print(io, "(::", ft, ")")
+        end
     end
     first = true
-    print(io, '(')
+    isreplerror ? print_with_color(:bold, io, "(") : print(io, '(')
     for i = 2:length(sig)  # fixme (iter): `eachindex` with offset?
         first || print(io, ", ")
         first = false
         print(io, "::", sig[i])
     end
-    print(io, ')')
+    isreplerror ? print_with_color(:bold, io, ")") : print(io, ')')
     nothing
 end
 
