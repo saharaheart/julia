@@ -31,8 +31,8 @@ typedef struct {
     jl_varbinding_t *vars;
     jl_unionstate_t Lunions;
     jl_unionstate_t Runions;
-    int8_t outer;
     jl_value_t **envout;
+    int envsz;
     int envidx;
 } jl_stenv_t;
 
@@ -80,7 +80,6 @@ static void statestack_pop(jl_unionstate_t *st)
 
 static int subtype_union(jl_value_t *t, jl_uniontype_t *u, jl_stenv_t *e, int8_t R, jl_unionstate_t *state)
 {
-    e->outer = 0;
     if (state->depth >= state->stacksize) {
         state->more = 1;
         return 1;
@@ -93,13 +92,12 @@ static int subtype_union(jl_value_t *t, jl_uniontype_t *u, jl_stenv_t *e, int8_t
 
 static int var_lt(jl_tvar_t *b, jl_value_t *a, jl_stenv_t *e)
 {
-    e->outer = 0;
     jl_varbinding_t *bb = lookup(e, b);
     if (bb == NULL)
         return subtype(b->ub, a, e);
     if (!bb->right)  // check ∀b . b<:a
         return subtype(bb->ub, a, e);
-    if (!subtype(bb->lb, a, e))
+    if (!((bb->lb == jl_bottom_type && !jl_is_type(a)) || subtype(bb->lb, a, e)))
         return 0;
     // for contravariance we would need to compute a meet here, but
     // because of invariance bb.ub ⊓ a == a here always. however for this
@@ -115,18 +113,19 @@ static jl_value_t *simple_join(jl_value_t *a, jl_value_t *b)
         return b;
     if (b == jl_bottom_type || a == jl_any_type)
         return a;
+    if (!jl_is_type(a) || !jl_is_type(b))
+        return jl_any_type;
     return jl_new_struct(jl_uniontype_type, a, b);
 }
 
 static int var_gt(jl_tvar_t *b, jl_value_t *a, jl_stenv_t *e)
 {
-    e->outer = 0;
     jl_varbinding_t *bb = lookup(e, b);
     if (bb == NULL)
         return subtype(a, b->lb, e);
     if (!bb->right)  // check ∀b . b>:a
         return subtype(a, bb->lb, e);
-    if (!subtype(a, bb->ub, e))
+    if (!((bb->ub == jl_any_type && !jl_is_type(a)) || subtype(a, bb->ub, e)))
         return 0;
     bb->lb = simple_join(bb->lb, a);
     return 1;
@@ -134,16 +133,17 @@ static int var_gt(jl_tvar_t *b, jl_value_t *a, jl_stenv_t *e)
 
 static jl_unionall_t *rename(jl_unionall_t *u)
 {
-    jl_tvar_t *t = jl_new_typevar(u->var->name, u->var->lb, u->var->ub);
-    JL_GC_PUSH1(&t);
-    u = jl_instantiate_unionall(u, t);
+    jl_tvar_t *v = jl_new_typevar(u->var->name, u->var->lb, u->var->ub);
+    jl_value_t *t = NULL;
+    JL_GC_PUSH2(&v, &t);
+    t = jl_instantiate_unionall(u, (jl_value_t*)v);
+    t = jl_new_struct(jl_unionall_type, v, t);
     JL_GC_POP();
-    return u;
+    return t;
 }
 
 static int subtype_unionall(jl_value_t *t, jl_unionall_t *u, jl_stenv_t *e, int8_t R)
 {
-    int outer = e->outer;
     if (lookup(e, u->var))
         u = rename(u);
     jl_varbinding_t vb = { u->var, u->var->lb, u->var->ub, R, e->vars };
@@ -154,7 +154,7 @@ static int subtype_unionall(jl_value_t *t, jl_unionall_t *u, jl_stenv_t *e, int8
         e->envidx++;
         ans = subtype(t, u->body, e);
         e->envidx--;
-        if (outer && e->envout) {
+        if (e->envidx < e->envsz) {
             jl_value_t *val;
             if (vb.lb == vb.ub)
                 val = vb.ub;
@@ -176,23 +176,20 @@ static int subtype_unionall(jl_value_t *t, jl_unionall_t *u, jl_stenv_t *e, int8
 static int subtype(jl_value_t *x, jl_value_t *y, jl_stenv_t *e)
 {
     // take apart unions before handling vars
-    if (jl_is_uniontype(x)) {
-        if (jl_is_uniontype(y))
-            return subtype_union(x, y, e, 1, &e->Runions);
-        if (jl_is_unionall(y))
-            return subtype_unionall(x, (jl_unionall_t*)y, e, 1);
-        return subtype_union(y, x, e, 0, &e->Lunions);
-    }
     if (jl_is_uniontype(y)) {
-        //if (x == ((jl_uniontype_t*)y)->a || x == ((jl_uniontype_t*)y)->b)
-        //    return 1;
+        if (x == y || x == ((jl_uniontype_t*)y)->a || x == ((jl_uniontype_t*)y)->b)
+            return 1;
         if (jl_is_unionall(x))
             return subtype_unionall(y, (jl_unionall_t*)x, e, 0);
         return subtype_union(x, y, e, 1, &e->Runions);
     }
+    if (jl_is_uniontype(x)) {
+        if (jl_is_unionall(y))
+            return subtype_unionall(x, (jl_unionall_t*)y, e, 1);
+        return subtype_union(y, x, e, 0, &e->Lunions);
+    }
     if (jl_is_typevar(x)) {
         if (jl_is_typevar(y)) {
-            e->outer = 0;
             if (x == y) return 1;
             jl_varbinding_t *xx = lookup(e, x);
             jl_varbinding_t *yy = lookup(e, y);
@@ -220,12 +217,14 @@ static int subtype(jl_value_t *x, jl_value_t *y, jl_stenv_t *e)
     }
     if (jl_is_typevar(y))
         return var_gt((jl_tvar_t*)y, x, e);
-    if (jl_is_unionall(y))
+    if (jl_is_unionall(y)) {
+        if (x == y && !(e->envidx < e->envsz))
+            return 1;
         return subtype_unionall(x, (jl_unionall_t*)y, e, 1);
+    }
     if (jl_is_unionall(x))
         return subtype_unionall(y, (jl_unionall_t*)x, e, 0);
     if (jl_is_datatype(x) && jl_is_datatype(y)) {
-        e->outer = 0;
         if (x == y) return 1;
         if (y == jl_any_type) return 1;
         jl_datatype_t *xd = (jl_datatype_t*)x, *yd = (jl_datatype_t*)y;
@@ -268,8 +267,8 @@ static int subtype(jl_value_t *x, jl_value_t *y, jl_stenv_t *e)
         }
         return 1;
     }
-    if (jl_is_type(x) && jl_is_type(y))
-        return x == jl_bottom_type || x == y;
+    if (jl_is_type(y))
+        return x == jl_bottom_type;
     return x == y || jl_egal(x, y);
 }
 
@@ -331,11 +330,12 @@ JL_DLLEXPORT int jl_subtype_env_size(jl_value_t *t)
 
 // `env` is NULL if no typevar information is requested, or otherwise
 // points to a rooted array of length `jl_subtype_env_size(y)`.
-JL_DLLEXPORT int jl_subtype_env(jl_value_t *x, jl_value_t *y, jl_value_t **env)
+JL_DLLEXPORT int jl_subtype_env(jl_value_t *x, jl_value_t *y, jl_value_t **env, int envsz)
 {
     jl_stenv_t e;
     e.vars = NULL;
-    e.outer = 1;
+    assert(env != NULL || envsz == 0);
+    e.envsz = envsz;
     e.envout = env;
     e.envidx = 0;
     e.Lunions.depth = 0;      e.Runions.depth = 0;
@@ -346,7 +346,7 @@ JL_DLLEXPORT int jl_subtype_env(jl_value_t *x, jl_value_t *y, jl_value_t **env)
 
 JL_DLLEXPORT int jl_subtype(jl_value_t *x, jl_value_t *y)
 {
-    return jl_subtype_env(x, y, NULL);
+    return jl_subtype_env(x, y, NULL, 0);
 }
 
 JL_DLLEXPORT int jl_isa(jl_value_t *x, jl_value_t *t)
