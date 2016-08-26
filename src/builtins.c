@@ -722,7 +722,7 @@ JL_CALLABLE(jl_f_setfield)
         idx = jl_field_index(st, (jl_sym_t*)args[1], 1);
     }
     jl_value_t *ft = jl_field_type(st,idx);
-    if (!jl_subtype(args[2], ft, 1)) {
+    if (!jl_isa(args[2], ft)) {
         jl_type_error("setfield!", ft, args[2]);
     }
     jl_set_nth_field(v, idx, args[2]);
@@ -1102,7 +1102,7 @@ static void add_builtin(const char *name, jl_value_t *v)
 
 jl_fptr_t jl_get_builtin_fptr(jl_value_t *b)
 {
-    assert(jl_subtype(b, (jl_value_t*)jl_builtin_type, 1));
+    assert(jl_isa(b, (jl_value_t*)jl_builtin_type));
     return jl_gf_mtable(b)->cache.leaf->func.linfo->fptr;
 }
 
