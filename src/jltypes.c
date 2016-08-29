@@ -119,14 +119,20 @@ static int has_free_typevars(jl_value_t *v, jl_typeenv_t *env, int inv)
     return 0;
 }
 
-JL_DLLEXPORT int jl_has_free_typevars(jl_value_t *v)
+JL_DLLEXPORT int jl_has_free_typevars(jl_value_t *t)
 {
-    return has_free_typevars(v, NULL, 1);
+    return has_free_typevars(t, NULL, 1);
 }
 
-JL_DLLEXPORT int jl_has_bound_typevars(jl_value_t *v, jl_typeenv_t *env)
+JL_DLLEXPORT int jl_has_bound_typevars(jl_value_t *t, jl_typeenv_t *env)
 {
-    return has_free_typevars(v, env, 0);
+    return has_free_typevars(t, env, 0);
+}
+
+JL_DLLEXPORT int jl_has_typevar(jl_value_t *t, jl_tvar_t *v)
+{
+    jl_typeenv_t env = { v, NULL, NULL };
+    return has_free_typevars(v, &env, 0);
 }
 
 JL_DLLEXPORT int (jl_is_leaf_type)(jl_value_t *v)
@@ -423,22 +429,14 @@ static size_t tuple_vararg_params(jl_svec_t *a, cenv_t *eqc, jl_vararg_kind_t *k
     return data_vararg_params(jl_svec_data(a), jl_svec_len(a), eqc, kind, lenkind);
 }
 
-jl_datatype_t *jl_wrap_vararg(jl_value_t *t, jl_value_t *n)
+jl_value_t *jl_wrap_vararg(jl_value_t *t, jl_value_t *n)
 {
     if (n == NULL) {
         if (t == NULL)
-            return (jl_datatype_t*)jl_instantiate_type_with((jl_value_t*)jl_vararg_type, NULL, 0);
-        jl_value_t *env[2];
-        env[0] = jl_tparam0(jl_vararg_type);
-        env[1] = t;
-        return (jl_datatype_t*)jl_instantiate_type_with((jl_value_t*)jl_vararg_type, env, 1);
+            return jl_vararg_type;
+        return jl_instantiate_unionall(jl_vararg_type, t);
     }
-    jl_value_t *env[4];
-    env[0] = jl_tparam0(jl_vararg_type);
-    env[1] = t;
-    env[2] = jl_tparam1(jl_vararg_type);
-    env[3] = n;
-    return (jl_datatype_t*)jl_instantiate_type_with((jl_value_t*)jl_vararg_type, env, 2);
+    return jl_instantiate_unionall((jl_unionall_t*)jl_instantiate_unionall(jl_vararg_type, t), n);
 }
 
 /*
@@ -1996,6 +1994,13 @@ JL_DLLEXPORT jl_value_t *jl_instantiate_unionall(jl_unionall_t *u, jl_value_t *p
     return inst_type_w_(u->body, &env, NULL, 1);
 }
 
+jl_value_t *jl_unwrap_unionall(jl_value_t *v)
+{
+    while (jl_is_unionall(v))
+        v = ((jl_unionall_t*)v)->body;
+    return v;
+}
+
 static jl_value_t *lookup_type_stack(jl_typestack_t *stack, jl_datatype_t *tt, size_t ntp,
                                      jl_value_t **iparams)
 {
@@ -2031,7 +2036,7 @@ void jl_precompute_memoized_dt(jl_datatype_t *dt)
 {
     int istuple = dt->name == jl_tuple_typename;
     size_t i, l = jl_nparams(dt);
-    dt->isleaftype = !dt->abstract || (jl_type_type != NULL && dt->name == jl_type_type->name);
+    dt->isleaftype = !dt->abstract || (jl_type_type != NULL && dt->name == jl_type_typename);
     for (i = 0; i < l; i++) {
         jl_value_t *p = jl_tparam(dt, i);
         size_t d = jl_type_depth(p) + 1;
@@ -2700,10 +2705,10 @@ static int jl_type_morespecific_(jl_value_t *a, jl_value_t *b, int invariant)
         while (tta != (jl_datatype_t*)jl_any_type) {
             if (tta->name == ttb->name) {
                 if (super) {
-                    if (tta->name != jl_type_type->name)
+                    if (tta->name != jl_type_typename)
                         return 1;
                 }
-                if (super && ttb->name == jl_type_type->name && jl_is_typevar(jl_tparam0(b))) {
+                if (super && ttb->name == jl_type_typename && jl_is_typevar(jl_tparam0(b))) {
                     if (jl_type_morespecific_(a, jl_tparam0(b), 1))
                         return 1;
                 }
@@ -3087,7 +3092,7 @@ static jl_value_t *type_match_(jl_value_t *child, jl_value_t *parent,
         if (tta->name == ttb->name) {
             // note: DataType <: Type, but Type{T} <: DataType
             // for any specific T.
-            if (super && morespecific && tta->name != jl_type_type->name)
+            if (super && morespecific && tta->name != jl_type_typename)
                 return jl_true;
             assert(jl_nparams(tta) == jl_nparams(ttb));
             for(i=0; i < jl_nparams(tta); i++) {
@@ -3104,8 +3109,8 @@ static jl_value_t *type_match_(jl_value_t *child, jl_value_t *parent,
         tta = tta->super; super = 1;
     }
     assert(!invariant);
-    if (((jl_datatype_t*)child)->name == jl_type_type->name &&
-        ttb->name != jl_type_type->name) {
+    if (((jl_datatype_t*)child)->name == jl_type_typename &&
+        ttb->name != jl_type_typename) {
         // Type{T} also matches >:typeof(T)
         return type_match_(jl_typeof(jl_tparam0(child)),
                            parent, env, morespecific, 0);
@@ -3170,15 +3175,15 @@ void jl_init_types(void)
     jl_methtable_type = jl_new_uninitialized_datatype();
     jl_nothing = jl_gc_alloc(ptls, 0, NULL);
 
-    jl_emptysvec = (jl_svec_t*)jl_gc_alloc(ptls, sizeof(void*),
-                                           jl_simplevector_type);
+    jl_emptysvec = (jl_svec_t*)jl_gc_alloc(ptls, sizeof(void*), jl_simplevector_type);
     jl_svec_set_len_unsafe(jl_emptysvec, 0);
 
     jl_any_type = jl_new_abstracttype((jl_value_t*)jl_symbol("Any"), NULL, jl_emptysvec);
     jl_any_type->super = jl_any_type;
     jl_type_type = jl_new_abstracttype((jl_value_t*)jl_symbol("Type"), jl_any_type, jl_emptysvec);
-    jl_type_type_mt = jl_new_method_table(jl_type_type->name->name, ptls->current_module);
-    jl_type_type->name->mt = jl_type_type_mt;
+    jl_type_typename = ((jl_datatype_t*)jl_type_type)->name;
+    jl_type_type_mt = jl_new_method_table(jl_type_typename->name, ptls->current_module);
+    jl_type_typename->mt = jl_type_type_mt;
 
     // initialize them. lots of cycles.
     jl_datatype_type->name = jl_new_typename(jl_symbol("DataType"));
@@ -3227,7 +3232,7 @@ void jl_init_types(void)
     jl_typename_type->super = jl_any_type;
     jl_typename_type->parameters = jl_emptysvec;
     jl_typename_type->name->names = jl_svec(8, jl_symbol("name"), jl_symbol("module"),
-                                            jl_symbol("names"), jl_symbol("primary"),
+                                            jl_symbol("names"), jl_symbol("wrapper"),
                                             jl_symbol("cache"), jl_symbol("linearcache"),
                                             jl_symbol("hash"), jl_symbol("mt"));
     jl_typename_type->types = jl_svec(8, jl_sym_type, jl_any_type, jl_simplevector_type,
@@ -3297,42 +3302,46 @@ void jl_init_types(void)
     jl_set_typeof(jl_nothing, jl_void_type);
     jl_void_type->instance = jl_nothing;
 
-    jl_uniontype_type = jl_new_datatype(jl_symbol("Union"),
-                                        jl_type_type, jl_emptysvec,
-                                        jl_svec(1, jl_symbol("types")),
-                                        jl_svec(1, jl_simplevector_type),
-                                        0, 0, 1);
+    jl_bottomtype_type = jl_new_datatype(jl_symbol("Bottom"), jl_type_type, jl_emptysvec,
+                                         jl_emptysvec, jl_emptysvec, 0, 0, 0);
+    jl_bottom_type = jl_new_struct(jl_bottomtype_type);
 
-    jl_bottom_type = (jl_value_t*)jl_new_struct(jl_uniontype_type, jl_emptysvec);
+    jl_uniontype_type = jl_new_datatype(jl_symbol("Union"), jl_type_type, jl_emptysvec,
+                                        jl_svec(2, jl_symbol("a"), jl_symbol("b")),
+                                        jl_svec(2, jl_any_type, jl_any_type),
+                                        0, 0, 2);
 
-    jl_tvar_type = jl_new_datatype(jl_symbol("TypeVar"),
-                                   jl_any_type, jl_emptysvec,
-                                   jl_svec(4, jl_symbol("name"),
-                                           jl_symbol("lb"), jl_symbol("ub"),
-                                           jl_symbol("bound")),
-                                   jl_svec(4, jl_sym_type, jl_type_type,
-                                           jl_type_type, jl_any_type),
+    jl_tvar_type = jl_new_datatype(jl_symbol("TypeVar"), jl_any_type, jl_emptysvec,
+                                   jl_svec(3, jl_symbol("name"),
+                                           jl_symbol("lb"), jl_symbol("ub")),
+                                   jl_svec(3, jl_sym_type,
+                                           jl_any_type, jl_any_type),
                                    0, 1, 3);
+
+    jl_unionall_type = jl_new_datatype(jl_symbol("UnionAll"), jl_type_type, jl_emptysvec,
+                                       jl_svec(2, jl_symbol("var"), jl_symbol("body")),
+                                       jl_svec(2, jl_tvar_type, jl_any_type),
+                                       0, 0, 2);
 
     vararg_sym = jl_symbol("Vararg");
     jl_svec_t *tv;
     tv = jl_svec2(tvar("T"),tvar("N"));
-    jl_vararg_type = jl_new_abstracttype((jl_value_t*)vararg_sym, jl_any_type, tv);
+    jl_vararg_type = (jl_unionall_t*)jl_new_abstracttype((jl_value_t*)vararg_sym, jl_any_type, tv);
 
     jl_anytuple_type = jl_new_datatype(jl_symbol("Tuple"), jl_any_type, jl_emptysvec,
                                        jl_emptysvec, jl_emptysvec, 0, 0, 0);
     jl_tuple_typename = jl_anytuple_type->name;
     jl_anytuple_type->uid = 0;
     jl_anytuple_type->parameters = jl_svec(1, jl_wrap_vararg((jl_value_t*)jl_any_type, (jl_value_t*)NULL));
-    //jl_anytuple_type->parameters = jl_svec(1, jl_wrap_vararg((jl_value_t*)NULL, (jl_value_t*)NULL));
     jl_anytuple_type->types = jl_anytuple_type->parameters;
     jl_anytuple_type->layout = NULL;
     jl_anytuple_type->hasfreetypevars = 0;
     jl_anytuple_type->isleaftype = 0;
 
-    jl_tvar_t *tttvar = jl_new_typevar(jl_symbol("T"),
-                                       (jl_value_t*)jl_bottom_type,(jl_value_t*)jl_any_type);
+    jl_tvar_t *tttvar = tvar("T");
     jl_type_type->parameters = jl_svec(1, tttvar);
+    jl_type_typename->wrapper = jl_new_unionall_type(tttvar, jl_type_type);
+    jl_type_type = jl_type_typename->wrapper;
 
     jl_tupletype_t *empty_tuple_type = jl_apply_tuple_type(jl_emptysvec);
     empty_tuple_type->uid = jl_assign_type_uid();
@@ -3589,17 +3598,9 @@ void jl_init_types(void)
     jl_svecset(jl_lambda_info_type->types, 9, jl_lambda_info_type);
     jl_svecset(jl_method_type->types, 8, jl_lambda_info_type);
 
-    jl_typector_type =
-        jl_new_datatype(jl_symbol("TypeConstructor"),
-                        jl_type_type, jl_emptysvec,
-                        jl_svec(2, jl_symbol("parameters"),
-                                jl_symbol("body")),
-                        jl_svec(2, jl_simplevector_type, jl_any_type),
-                        0, 0, 2);
-
     // all kinds of types share a method table
-    jl_typector_type->name->mt = jl_uniontype_type->name->mt = jl_datatype_type->name->mt =
-        jl_type_type->name->mt;
+    jl_unionall_type->name->mt = jl_uniontype_type->name->mt = jl_datatype_type->name->mt =
+        jl_type_typename->mt;
 
     jl_intrinsic_type = jl_new_bitstype((jl_value_t*)jl_symbol("IntrinsicFunction"),
                                         jl_any_type, jl_emptysvec, 32);
@@ -3614,9 +3615,14 @@ void jl_init_types(void)
                         (jl_datatype_t*)jl_apply_type((jl_value_t*)jl_ref_type, jl_svec_data(tv), 1), tv,
                         sizeof(void*)*8);
 
+    // U T<:Tuple Type{T}
+    tttvar = jl_new_typevar(jl_symbol("T"),
+                            (jl_value_t*)jl_bottom_type,
+                            (jl_value_t*)jl_anytuple_type);
+    jl_anytuple_type_type = jl_new_unionall_type(tttvar, jl_wrap_Type((jl_value_t*)tttvar));
+
     // Type{T}
-    jl_typetype_tvar = jl_new_typevar(jl_symbol("T"),
-                                      (jl_value_t*)jl_bottom_type,(jl_value_t*)jl_any_type);
+    jl_typetype_tvar = tvar("T");
     jl_typetype_type = (jl_datatype_t*)jl_apply_type1((jl_value_t*)jl_type_type, jl_typetype_tvar);
 
     jl_ANY_flag = (jl_value_t*)tvar("ANY");
@@ -3635,7 +3641,6 @@ void jl_init_types(void)
     jl_svecset(jl_datatype_type->types, 13, jl_int32_type);
     jl_svecset(jl_datatype_type->types, 14, jl_bool_type);
     jl_svecset(jl_datatype_type->types, 15, jl_bool_type);
-    jl_svecset(jl_tvar_type->types, 3, jl_bool_type);
     jl_svecset(jl_simplevector_type->types, 0, jl_long_type);
     jl_svecset(jl_typename_type->types, 6, jl_long_type);
     jl_svecset(jl_methtable_type->types, 3, jl_long_type);
@@ -3726,10 +3731,6 @@ void jl_init_types(void)
     polly_sym = jl_symbol("polly");
     inline_sym = jl_symbol("inline");
 
-    tttvar = jl_new_typevar(jl_symbol("T"),
-                                  (jl_value_t*)jl_bottom_type,
-                                  (jl_value_t*)jl_anytuple_type);
-    jl_anytuple_type_type = jl_wrap_Type((jl_value_t*)tttvar);
     jl_cfunction_list.unknown = jl_nothing;
 }
 

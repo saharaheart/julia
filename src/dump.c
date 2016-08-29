@@ -1039,7 +1039,7 @@ static void jl_serialize_lambdas_from_mod(jl_serializer_state *s, jl_module_t *m
                     jl_typename_t *tn = ((jl_datatype_t*)b->value)->name;
                     if (tn->module == m && tn->name == b->name) {
                         jl_methtable_t *mt = tn->mt;
-                        if (mt != NULL && (jl_value_t*)mt != jl_nothing && (mt != jl_type_type_mt || tn == jl_type_type->name)) {
+                        if (mt != NULL && (jl_value_t*)mt != jl_nothing && (mt != jl_type_type_mt || tn == jl_type_typename)) {
                             jl_serialize_methtable_from_mod(s, tn);
                         }
                     }
@@ -1840,7 +1840,7 @@ static void jl_reinit_item(jl_value_t *v, int how, arraylist_t *tracee_list)
             case 3: { // rehash MethodTable
                 jl_methtable_t *mt = (jl_methtable_t*)v;
                 jl_typemap_rehash(mt->defs, 0);
-                jl_typemap_rehash(mt->cache, (mt == jl_type_type->name->mt) ? 0 : 1);
+                jl_typemap_rehash(mt->cache, (mt == jl_type_typename->mt) ? 0 : 1);
                 if (tracee_list)
                     arraylist_push(tracee_list, mt);
                 break;
@@ -1943,11 +1943,11 @@ static void jl_save_system_image_to_stream(ios_t *f)
     jl_serialize_value(&s, jl_main_module);
     jl_serialize_value(&s, jl_top_module);
     jl_serialize_value(&s, jl_typeinf_func);
-    jl_serialize_value(&s, jl_type_type->name->mt);
+    jl_serialize_value(&s, jl_type_typename->mt);
 
     jl_prune_type_cache(jl_tuple_typename->cache);
     jl_prune_type_cache(jl_tuple_typename->linearcache);
-    jl_prune_type_cache(jl_type_type->name->cache);
+    jl_prune_type_cache(jl_type_typename->cache);
 
     intptr_t i;
     for (i = 0; i < builtin_types.len; i++) {
@@ -2041,7 +2041,7 @@ static void jl_restore_system_image_from_stream(ios_t *f)
     jl_internal_main_module = jl_main_module;
     jl_typeinf_func = (jl_function_t*)jl_deserialize_value(&s, NULL);
     jl_type_type_mt = (jl_methtable_t*)jl_deserialize_value(&s, NULL);
-    jl_type_type->name->mt = jl_unionall_type->name->mt = jl_uniontype_type->name->mt = jl_datatype_type->name->mt =
+    jl_type_typename->mt = jl_unionall_type->name->mt = jl_uniontype_type->name->mt = jl_datatype_type->name->mt =
         jl_type_type_mt;
 
     intptr_t i;
@@ -2517,7 +2517,7 @@ void jl_init_serializer(void)
                      jl_symbol_type->name, jl_ssavalue_type->name, jl_tuple_typename,
                      jl_ref_type->name, jl_pointer_type->name, jl_simplevector_type->name,
                      jl_datatype_type->name, jl_uniontype_type->name, jl_array_type->name,
-                     jl_expr_type->name, jl_typename_type->name, jl_type_type->name,
+                     jl_expr_type->name, jl_typename_type->name, jl_type_typename,
                      jl_methtable_type->name, jl_typemap_level_type->name, jl_typemap_entry_type->name, jl_tvar_type->name,
                      jl_abstractarray_type->name, jl_vararg_type->name,
                      jl_densearray_type->name, jl_void_type->name, jl_lambda_info_type->name, jl_method_type->name,

@@ -298,9 +298,9 @@ typedef struct {
     jl_sym_t *name;
     struct _jl_module_t *module;
     jl_svec_t *names;  // field names
-    // `primary` is either the only instantiation of the type (if no parameters)
+    // `wrapper` is either the only instantiation of the type (if no parameters)
     // or a UnionAll accepting parameters to make an instantiation.
-    jl_value_t *primary;
+    jl_value_t *wrapper;
     jl_svec_t *cache;        // sorted array
     jl_svec_t *linearcache;  // unsorted array
     intptr_t hash;
@@ -979,6 +979,7 @@ JL_DLLEXPORT uintptr_t jl_object_id(jl_value_t *v);
 // type predicates and basic operations
 JL_DLLEXPORT int jl_is_leaf_type(jl_value_t *v);
 JL_DLLEXPORT int jl_has_free_typevars(jl_value_t *v);
+JL_DLLEXPORT int jl_has_typevar(jl_value_t *t, jl_tvar_t *v);
 JL_DLLEXPORT int jl_subtype(jl_value_t *a, jl_value_t *b);
 JL_DLLEXPORT int jl_subtype_env_size(jl_value_t *t);
 JL_DLLEXPORT int jl_subtype_env(jl_value_t *x, jl_value_t *y, jl_value_t **env, int envsz);
@@ -1009,14 +1010,14 @@ JL_DLLEXPORT jl_value_t *jl_apply_type1(jl_value_t *tc, jl_value_t *p1);
 JL_DLLEXPORT jl_value_t *jl_apply_type2(jl_value_t *tc, jl_value_t *p1, jl_value_t *p2);
 JL_DLLEXPORT jl_tupletype_t *jl_apply_tuple_type(jl_svec_t *params);
 JL_DLLEXPORT jl_tupletype_t *jl_apply_tuple_type_v(jl_value_t **p, size_t np);
-JL_DLLEXPORT jl_datatype_t *jl_new_datatype(jl_sym_t *name, jl_datatype_t *super,
-                                            jl_svec_t *parameters,
-                                            jl_svec_t *fnames, jl_svec_t *ftypes,
-                                            int abstract, int mutabl,
-                                            int ninitialized);
-JL_DLLEXPORT jl_datatype_t *jl_new_bitstype(jl_value_t *name,
-                                            jl_datatype_t *super,
-                                            jl_svec_t *parameters, size_t nbits);
+JL_DLLEXPORT jl_value_t *jl_new_datatype(jl_sym_t *name, jl_datatype_t *super,
+                                         jl_svec_t *parameters,
+                                         jl_svec_t *fnames, jl_svec_t *ftypes,
+                                         int abstract, int mutabl,
+                                         int ninitialized);
+JL_DLLEXPORT jl_value_t *jl_new_bitstype(jl_value_t *name,
+                                         jl_datatype_t *super,
+                                         jl_svec_t *parameters, size_t nbits);
 
 // constructors
 JL_DLLEXPORT jl_value_t *jl_new_bits(jl_value_t *bt, void *data);
