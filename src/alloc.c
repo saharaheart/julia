@@ -608,9 +608,16 @@ jl_method_t *jl_new_method(jl_lambda_info_t *definition, jl_sym_t *name, jl_tupl
     m->name = name;
     m->sig = sig;
     if (jl_svec_len(tvars) == 1)
-        tvars = (jl_svec_t*)jl_svecref(tvars, 0);
-    m->tvars = tvars;
+        m->tvars = (jl_svec_t*)jl_svecref(tvars, 0);
+    else
+        m->tvars = tvars;
     JL_GC_PUSH1(&m);
+    int i;
+    for(i=(int)jl_svec_len(tvars)-1; i >= 0 ; i--) {
+        m->sig = jl_new_unionall_type((jl_tvar_t*)jl_svecref(tvars,i), m->sig);
+        jl_gc_wb(m, m->sig);
+    }
+    sig = m->sig;
     // the front end may add this lambda to multiple methods; make a copy if so
     jl_method_t *oldm = definition->def;
     int reused = oldm != NULL;
