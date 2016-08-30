@@ -19,10 +19,13 @@ extern "C" {
 // compute whether the specificity of this type is equivalent to Any in the sort order
 static int jl_is_any(jl_value_t *t1)
 {
-    return (t1 == (jl_value_t*)jl_any_type ||
+    return (t1 == (jl_value_t*)jl_any_type || t1 == jl_ANY_flag);
+    // TODO jb/subtype
+    /*
             (jl_is_typevar(t1) &&
              ((jl_tvar_t*)t1)->ub == (jl_value_t*)jl_any_type &&
              !((jl_tvar_t*)t1)->bound));
+    */
 }
 
 // ----- Type Signature Subtype Testing ----- //
@@ -576,10 +579,7 @@ int sigs_eq(jl_value_t *a, jl_value_t *b, int useenv)
     // useenv == 0 : subtyping + ensure typevars correspond
     // useenv == 1 : subtyping + ensure typevars correspond + fail if bound != bound in some typevar match
     // useenv == 2 : ignore typevars (because UnionAll getting lost in intersection can cause jl_types_equal to fail in the wrong direction for some purposes)
-    if (useenv != 2 && (jl_has_typevars(a) || jl_has_typevars(b))) {
-        return jl_types_equal_generic(a, b, useenv);
-    }
-    return jl_subtype(a, b) && jl_subtype(b, a);
+    return jl_types_equal(a, b);
 }
 
 /*
@@ -620,7 +620,7 @@ static jl_typemap_entry_t *jl_typemap_assoc_by_type_(jl_typemap_entry_t *ml, jl_
             else if (ml->tvars == jl_emptysvec)
                 ismatch = jl_tuple_subtype(jl_svec_data(types->parameters), n, ml->sig, 0);
             else if (penv == NULL) {
-                ismatch = jl_type_match((jl_value_t*)types, (jl_value_t*)ml->sig) != (jl_value_t*)jl_false;
+                ismatch = jl_subtype((jl_value_t*)types, (jl_value_t*)ml->sig);
             }
             else {
                 // TODO: this is missing the actual subtype test,

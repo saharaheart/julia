@@ -817,7 +817,7 @@ JL_DLLEXPORT jl_typename_t *jl_new_typename_in(jl_sym_t *name, jl_module_t *modu
                                     jl_typename_type);
     tn->name = name;
     tn->module = module;
-    tn->primary = NULL;
+    tn->wrapper = NULL;
     tn->cache = jl_emptysvec;
     tn->linearcache = jl_emptysvec;
     tn->names = NULL;
@@ -835,7 +835,7 @@ JL_DLLEXPORT jl_typename_t *jl_new_typename(jl_sym_t *name)
     return jl_new_typename_in(name, ptls->current_module);
 }
 
-jl_value_t *jl_new_abstracttype(jl_value_t *name, jl_datatype_t *super, jl_svec_t *parameters)
+jl_datatype_t *jl_new_abstracttype(jl_value_t *name, jl_datatype_t *super, jl_svec_t *parameters)
 {
     return jl_new_datatype((jl_sym_t*)name, super, parameters, jl_emptysvec, jl_emptysvec, 1, 0, 0);
 }
@@ -1026,11 +1026,11 @@ void jl_compute_field_offsets(jl_datatype_t *st)
 
 extern int jl_boot_file_loaded;
 
-JL_DLLEXPORT jl_value_t *jl_new_datatype(jl_sym_t *name, jl_datatype_t *super,
-                                         jl_svec_t *parameters,
-                                         jl_svec_t *fnames, jl_svec_t *ftypes,
-                                         int abstract, int mutabl,
-                                         int ninitialized)
+JL_DLLEXPORT jl_datatype_t *jl_new_datatype(jl_sym_t *name, jl_datatype_t *super,
+                                            jl_svec_t *parameters,
+                                            jl_svec_t *fnames, jl_svec_t *ftypes,
+                                            int abstract, int mutabl,
+                                            int ninitialized)
 {
     jl_ptls_t ptls = jl_get_ptls_states();
     jl_datatype_t *t=NULL;
@@ -1086,14 +1086,14 @@ JL_DLLEXPORT jl_value_t *jl_new_datatype(jl_sym_t *name, jl_datatype_t *super,
     t->name->names = fnames;
     jl_gc_wb(t->name, t->name->names);
 
-    if (t->name->primary == NULL) {
-        t->name->primary = (jl_value_t*)t;
+    if (t->name->wrapper == NULL) {
+        t->name->wrapper = (jl_value_t*)t;
         jl_gc_wb(t->name, t);
         int i;
         int np = jl_svec_len(parameters);
         for (i=np-1; i >= 0; i--) {
-            t->name->primary = (jl_value_t*)jl_new_unionall_type((jl_tvar_t*)jl_svecref(parameters,i), t->name->primary);
-            jl_gc_wb(t->name, t->name->primary);
+            t->name->wrapper = (jl_value_t*)jl_new_unionall_type((jl_tvar_t*)jl_svecref(parameters,i), t->name->wrapper);
+            jl_gc_wb(t->name, t->name->wrapper);
         }
     }
     jl_precompute_memoized_dt(t);
@@ -1112,15 +1112,14 @@ JL_DLLEXPORT jl_value_t *jl_new_datatype(jl_sym_t *name, jl_datatype_t *super,
         }
     }
     JL_GC_POP();
-    return t->name->primary;
+    return t;
 }
 
 JL_DLLEXPORT jl_datatype_t *jl_new_bitstype(jl_value_t *name, jl_datatype_t *super,
                                             jl_svec_t *parameters, size_t nbits)
 {
-    jl_value_t *w = jl_new_datatype((jl_sym_t*)name, super, parameters,
-                                    jl_emptysvec, jl_emptysvec, 0, 0, 0);
-    jl_datatype_t *bt = (jl_datatype_t*)jl_unwrap_unionall(w);
+    jl_datatype_t *bt = jl_new_datatype((jl_sym_t*)name, super, parameters,
+                                        jl_emptysvec, jl_emptysvec, 0, 0, 0);
     uint32_t nbytes = (nbits + 7) / 8;
     uint32_t alignm = next_power_of_two(nbytes);
     if (alignm > MAX_ALIGN)
@@ -1142,9 +1141,9 @@ JL_DLLEXPORT jl_tvar_t *jl_new_typevar(jl_sym_t *name, jl_value_t *lb, jl_value_
     return tv;
 }
 
-JL_DLLEXPORT jl_value_t *jl_new_unionall_type(jl_tvar_t *v, jl_value_t *body)
+JL_DLLEXPORT jl_unionall_t *jl_new_unionall_type(jl_tvar_t *v, jl_value_t *body)
 {
-    return jl_new_struct(jl_unionall_type, v, body);
+    return (jl_unionall_t*)jl_new_struct(jl_unionall_type, v, body);
 }
 
 // bits constructors ----------------------------------------------------------

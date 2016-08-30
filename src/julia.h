@@ -205,7 +205,7 @@ typedef struct _jl_method_t {
     int32_t line;
 
     // method's type signature. partly redundant with lambda_template->specTypes
-    jl_type_t *sig;
+    jl_value_t *sig;
     // bound type variables (static parameters). redundant with TypeMapEntry->tvars
     jl_svec_t *tvars;
     // list of potentially-ambiguous methods (nothing = none, Vector{Any} of Methods otherwise)
@@ -244,7 +244,7 @@ typedef struct _jl_lambda_info_t {
     jl_value_t *rettype;
     jl_svec_t *sparam_syms; // sparams is a vector of values indexed by symbols
     jl_svec_t *sparam_vals;
-    jl_type_t *specTypes;  // argument types this was specialized for
+    jl_value_t *specTypes;  // argument types this was specialized for
     jl_value_t *code;  // compressed uint8 array, or Any array of statements
     jl_value_t *slottypes;
     jl_value_t *ssavaluetypes;  // types of ssa values
@@ -478,8 +478,9 @@ extern JL_DLLEXPORT jl_typename_t *jl_tuple_typename;
 extern JL_DLLEXPORT jl_typename_t *jl_vecelement_typename;
 extern JL_DLLEXPORT jl_datatype_t *jl_anytuple_type;
 #define jl_tuple_type jl_anytuple_type
-extern JL_DLLEXPORT jl_datatype_t *jl_anytuple_type_type;
+extern JL_DLLEXPORT jl_unionall_t *jl_anytuple_type_type;
 extern JL_DLLEXPORT jl_unionall_t *jl_vararg_type;
+extern JL_DLLEXPORT jl_typename_t *jl_vararg_typename;
 extern JL_DLLEXPORT jl_datatype_t *jl_task_type;
 extern JL_DLLEXPORT jl_datatype_t *jl_function_type;
 extern JL_DLLEXPORT jl_datatype_t *jl_builtin_type;
@@ -879,6 +880,8 @@ static inline uint32_t jl_fielddesc_size(int8_t fielddesc_type)
 #define jl_is_cpointer(v)    jl_is_cpointer_type(jl_typeof(v))
 #define jl_is_pointer(v)     jl_is_cpointer_type(jl_typeof(v))
 
+JL_DLLEXPORT int jl_subtype(jl_value_t *a, jl_value_t *b);
+
 STATIC_INLINE int jl_is_type(jl_value_t *v)
 {
     jl_value_t *t = jl_typeof(v);
@@ -948,10 +951,10 @@ STATIC_INLINE int jl_is_abstract_ref_type(jl_value_t *t)
             ((jl_datatype_t*)(t))->name == ((jl_datatype_t*)jl_ref_type->body)->name);
 }
 
-STATIC_INLINE jl_value_t *jl_is_ref_type(jl_value_t *t)
+STATIC_INLINE int jl_is_ref_type(jl_value_t *t)
 {
     if (!jl_is_datatype(t)) return 0;
-    return jl_subtype(t, jl_ref_type);
+    return jl_subtype(t, (jl_value_t*)jl_ref_type);
 }
 
 STATIC_INLINE int jl_is_tuple_type(void *t)
@@ -980,7 +983,6 @@ JL_DLLEXPORT uintptr_t jl_object_id(jl_value_t *v);
 JL_DLLEXPORT int jl_is_leaf_type(jl_value_t *v);
 JL_DLLEXPORT int jl_has_free_typevars(jl_value_t *v);
 JL_DLLEXPORT int jl_has_typevar(jl_value_t *t, jl_tvar_t *v);
-JL_DLLEXPORT int jl_subtype(jl_value_t *a, jl_value_t *b);
 JL_DLLEXPORT int jl_subtype_env_size(jl_value_t *t);
 JL_DLLEXPORT int jl_subtype_env(jl_value_t *x, jl_value_t *y, jl_value_t **env, int envsz);
 JL_DLLEXPORT int jl_isa(jl_value_t *a, jl_value_t *t);
@@ -1003,21 +1005,21 @@ STATIC_INLINE int jl_is_leaf_type_(jl_value_t *v)
 // type constructors
 JL_DLLEXPORT jl_typename_t *jl_new_typename(jl_sym_t *name);
 JL_DLLEXPORT jl_tvar_t *jl_new_typevar(jl_sym_t *name, jl_value_t *lb, jl_value_t *ub);
-JL_DLLEXPORT jl_value_t *jl_new_unionall_type(jl_tvar_t *v, jl_value_t *body);
+JL_DLLEXPORT jl_unionall_t *jl_new_unionall_type(jl_tvar_t *v, jl_value_t *body);
 JL_DLLEXPORT jl_value_t *jl_instantiate_unionall(jl_unionall_t *u, jl_value_t *p);
 JL_DLLEXPORT jl_value_t *jl_apply_type(jl_value_t *tc, jl_value_t **params, size_t n);
 JL_DLLEXPORT jl_value_t *jl_apply_type1(jl_value_t *tc, jl_value_t *p1);
 JL_DLLEXPORT jl_value_t *jl_apply_type2(jl_value_t *tc, jl_value_t *p1, jl_value_t *p2);
 JL_DLLEXPORT jl_tupletype_t *jl_apply_tuple_type(jl_svec_t *params);
 JL_DLLEXPORT jl_tupletype_t *jl_apply_tuple_type_v(jl_value_t **p, size_t np);
-JL_DLLEXPORT jl_value_t *jl_new_datatype(jl_sym_t *name, jl_datatype_t *super,
-                                         jl_svec_t *parameters,
-                                         jl_svec_t *fnames, jl_svec_t *ftypes,
-                                         int abstract, int mutabl,
-                                         int ninitialized);
-JL_DLLEXPORT jl_value_t *jl_new_bitstype(jl_value_t *name,
-                                         jl_datatype_t *super,
-                                         jl_svec_t *parameters, size_t nbits);
+JL_DLLEXPORT jl_datatype_t *jl_new_datatype(jl_sym_t *name, jl_datatype_t *super,
+                                            jl_svec_t *parameters,
+                                            jl_svec_t *fnames, jl_svec_t *ftypes,
+                                            int abstract, int mutabl,
+                                            int ninitialized);
+JL_DLLEXPORT jl_datatype_t *jl_new_bitstype(jl_value_t *name,
+                                            jl_datatype_t *super,
+                                            jl_svec_t *parameters, size_t nbits);
 
 // constructors
 JL_DLLEXPORT jl_value_t *jl_new_bits(jl_value_t *bt, void *data);
@@ -1110,7 +1112,7 @@ typedef enum {
 STATIC_INLINE int jl_is_vararg_type(jl_value_t *v)
 {
     return (jl_is_datatype(v) &&
-            ((jl_datatype_t*)(v))->name == jl_vararg_type->name);
+            ((jl_datatype_t*)(v))->name == jl_vararg_typename);
 }
 
 STATIC_INLINE jl_vararg_kind_t jl_vararg_kind(jl_value_t *v)
@@ -1121,7 +1123,7 @@ STATIC_INLINE jl_vararg_kind_t jl_vararg_kind(jl_value_t *v)
     if (jl_is_long(lenv))
         return JL_VARARG_INT;
     if (jl_is_typevar(lenv))
-        return ((jl_tvar_t*)lenv)->bound ? JL_VARARG_BOUND : JL_VARARG_UNBOUND;
+        return JL_VARARG_BOUND;
     return JL_VARARG_UNBOUND;
 }
 

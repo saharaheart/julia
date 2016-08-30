@@ -295,8 +295,8 @@ static jl_value_t *eval(jl_value_t *e, interpreter_state *s)
         JL_GC_PUSH4(&para, &super, &temp, &w);
         assert(jl_is_svec(para));
         assert(jl_is_symbol(name));
-        w = jl_new_abstracttype(name, NULL, (jl_svec_t*)para);
-        dt = (jl_datatype_t*)jl_unwrap_unionall(w);
+        dt = jl_new_abstracttype(name, NULL, (jl_svec_t*)para);
+        w = dt->name->wrapper;
         jl_binding_t *b = jl_get_binding_wr(modu, (jl_sym_t*)name);
         temp = b->value;
         check_can_assign_type(b);
@@ -339,8 +339,8 @@ static jl_value_t *eval(jl_value_t *e, interpreter_state *s)
         if (nb < 1 || nb>=(1<<23) || (nb&7) != 0)
             jl_errorf("invalid number of bits in type %s",
                       jl_symbol_name((jl_sym_t*)name));
-        w = jl_new_bitstype(name, NULL, (jl_svec_t*)para, nb);
-        dt = (jl_datatype_t*)jl_unwrap_unionall(w);
+        dt = jl_new_bitstype(name, NULL, (jl_svec_t*)para, nb);
+        w = dt->name->wrapper;
         jl_binding_t *b = jl_get_binding_wr(modu, (jl_sym_t*)name);
         temp = b->value;
         check_can_assign_type(b);
@@ -383,10 +383,10 @@ static jl_value_t *eval(jl_value_t *e, interpreter_state *s)
             assert(!((jl_tvar_t*)jl_svecref(para, i))->bound);
         }
 #endif
-        w = jl_new_datatype((jl_sym_t*)name, NULL, (jl_svec_t*)para,
-                            (jl_svec_t*)temp, NULL,
-                            0, args[5]==jl_true ? 1 : 0, jl_unbox_long(args[6]));
-        jl_datatype_t *dt = (jl_datatype_t*)jl_unwrap_unionall(w);
+        dt = jl_new_datatype((jl_sym_t*)name, NULL, (jl_svec_t*)para,
+                             (jl_svec_t*)temp, NULL,
+                             0, args[5]==jl_true ? 1 : 0, jl_unbox_long(args[6]));
+        w = dt->name->wrapper;
 
         jl_binding_t *b = jl_get_binding_wr(modu, (jl_sym_t*)name);
         temp = b->value;  // save old value

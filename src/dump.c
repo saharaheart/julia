@@ -489,7 +489,7 @@ static void jl_serialize_datatype(jl_serializer_state *s, jl_datatype_t *dt)
 {
     int tag = 0;
     if (s->mode == MODE_MODULE_POSTWORK) {
-        if (dt->name->primary == (jl_value_t*)dt)
+        if (jl_unwrap_unionall(dt->name->wrapper) == (jl_value_t*)dt)
             tag = 6; // primary type
         else if (dt->uid != 0)
             tag = 7; // must use apply_type
@@ -504,7 +504,7 @@ static void jl_serialize_datatype(jl_serializer_state *s, jl_datatype_t *dt)
                 break;
             }
         }
-        if (!internal && dt->name->primary == (jl_value_t*)dt) {
+        if (!internal && jl_unwrap_unionall(dt->name->wrapper) == (jl_value_t*)dt) {
             tag = 6; // external primary type
         }
         else if (dt->uid == 0) {
@@ -1164,10 +1164,13 @@ static jl_value_t *jl_deserialize_datatype(jl_serializer_state *s, int pos, jl_v
     int tag = read_uint8(s->s);
     if (tag == 6 || tag == 7) {
         jl_typename_t *name = (jl_typename_t*)jl_deserialize_value(s, NULL);
-        jl_value_t *dtv = name->primary;
+        jl_value_t *dtv = name->wrapper;
         if (tag == 7) {
             jl_svec_t *parameters = (jl_svec_t*)jl_deserialize_value(s, NULL);
             dtv = jl_apply_type(dtv, jl_svec_data(parameters), jl_svec_len(parameters));
+        }
+        else {
+            dtv = jl_unwrap_unionall(dtv);
         }
         backref_list.items[pos] = dtv;
         return dtv;
@@ -2519,7 +2522,7 @@ void jl_init_serializer(void)
                      jl_datatype_type->name, jl_uniontype_type->name, jl_array_type->name,
                      jl_expr_type->name, jl_typename_type->name, jl_type_typename,
                      jl_methtable_type->name, jl_typemap_level_type->name, jl_typemap_entry_type->name, jl_tvar_type->name,
-                     jl_abstractarray_type->name, jl_vararg_type->name,
+                     jl_abstractarray_type->name, jl_vararg_typename,
                      jl_densearray_type->name, jl_void_type->name, jl_lambda_info_type->name, jl_method_type->name,
                      jl_module_type->name, jl_function_type->name, jl_typedslot_type->name,
                      jl_abstractslot_type->name, jl_slotnumber_type->name,

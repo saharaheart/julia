@@ -1051,10 +1051,10 @@ static uintptr_t jl_object_id_(jl_value_t *tv, jl_value_t *v)
     jl_datatype_t *dt = (jl_datatype_t*)tv;
     if (dt == jl_datatype_type) {
         jl_datatype_t *dtv = (jl_datatype_t*)v;
-        // `name->primary` is cacheable even though it contains TypeVars
+        // `name->wrapper` is cacheable even though it contains TypeVars
         // that don't have stable IDs.
-        if (jl_egal(dtv->name->primary, v))
-            return bitmix(~dtv->name->hash, 0xaa5566aa);
+        //if (jl_egal(dtv->name->wrapper, v))
+        //    return bitmix(~dtv->name->hash, 0xaa5566aa);
         return bitmix(~dtv->name->hash, hash_svec(dtv->parameters));
     }
     if (dt == jl_typename_type)
@@ -1271,7 +1271,7 @@ static size_t jl_static_show_x_(JL_STREAM *out, jl_value_t *v, jl_datatype_t *vt
             n += jl_printf(out, ".");
         }
         n += jl_printf(out, "%s", jl_symbol_name(dv->name->name));
-        if (dv->parameters && (jl_value_t*)dv != dv->name->primary &&
+        if (dv->parameters && (jl_value_t*)dv != dv->name->wrapper &&
             !jl_types_equal((jl_value_t*)dv, (jl_value_t*)jl_tuple_type)) {
             size_t j, tlen = jl_nparams(dv);
             if (tlen > 0) {
@@ -1549,7 +1549,7 @@ JL_DLLEXPORT size_t jl_static_show_func_sig(JL_STREAM *s, jl_value_t *type)
     if (ftype == NULL)
         return jl_static_show(s, type);
     size_t n = 0;
-    if (jl_nparams(ftype)==0 || ftype == ((jl_datatype_t*)ftype)->name->primary) {
+    if (jl_nparams(ftype)==0 || ftype == ((jl_datatype_t*)ftype)->name->wrapper) {
         n += jl_printf(s, "%s", jl_symbol_name(((jl_datatype_t*)ftype)->name->mt->name));
     }
     else {
