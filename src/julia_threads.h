@@ -107,6 +107,10 @@ typedef struct _jl_tls_states_t {
     pthread_t system_id;
     void *signal_stack;
 #endif
+    // execution of certain certain unpure
+    // statements is prohibited from certain
+    // callbacks (such as generated functions)
+    int in_pure_callback;
     // Counter to disable finalizer **on the current thread**
     int finalizers_inhibited;
     arraylist_t finalizers;
