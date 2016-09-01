@@ -351,6 +351,24 @@ JL_DLLEXPORT int jl_subtype(jl_value_t *x, jl_value_t *y)
     return jl_subtype_env(x, y, NULL, 0);
 }
 
+int jl_tuple_subtype(jl_value_t **child, size_t cl, jl_datatype_t *pdt, int ta)
+{
+    // TODO jb/subtype avoid allocation
+    jl_value_t *tu=NULL;
+    int ans;
+    JL_GC_PUSH1(&tu);
+    if (ta) {
+        tu = jl_f_tuple(NULL, child, cl);
+        ans = jl_isa(tu, pdt);
+    }
+    else {
+        tu = jl_apply_tuple_type_v(child, cl);
+        ans = jl_subtype(tu, pdt);
+    }
+    JL_GC_POP();
+    return ans;
+}
+
 JL_DLLEXPORT int jl_isa(jl_value_t *x, jl_value_t *t)
 {
     if (jl_typeis(x,t))
