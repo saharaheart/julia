@@ -78,15 +78,17 @@ static void statestack_pop(jl_unionstate_t *st)
 
 // main subtyping algorithm
 
+static int subtype(jl_value_t *x, jl_value_t *y, jl_stenv_t *e);
+
 static int subtype_union(jl_value_t *t, jl_uniontype_t *u, jl_stenv_t *e, int8_t R, jl_unionstate_t *state)
 {
     if (state->depth >= state->stacksize) {
         state->more = 1;
         return 1;
     }
-    int ui = statestack_get(state, state.depth);
+    int ui = statestack_get(state, state->depth);
     state->depth++;
-    int choice = ui==0 ? u->a : u->b;
+    jl_value_t *choice = ui==0 ? u->a : u->b;
     return R ? subtype(t, choice, e) : subtype(choice, t, e);
 }
 
@@ -131,7 +133,7 @@ static int var_gt(jl_tvar_t *b, jl_value_t *a, jl_stenv_t *e)
     return 1;
 }
 
-static jl_unionall_t *rename(jl_unionall_t *u)
+static jl_unionall_t *rename_unionall(jl_unionall_t *u)
 {
     jl_tvar_t *v = jl_new_typevar(u->var->name, u->var->lb, u->var->ub);
     jl_value_t *t = NULL;
@@ -139,13 +141,13 @@ static jl_unionall_t *rename(jl_unionall_t *u)
     t = jl_instantiate_unionall(u, (jl_value_t*)v);
     t = jl_new_struct(jl_unionall_type, v, t);
     JL_GC_POP();
-    return t;
+    return (jl_unionall_t*)t;
 }
 
 static int subtype_unionall(jl_value_t *t, jl_unionall_t *u, jl_stenv_t *e, int8_t R)
 {
     if (lookup(e, u->var))
-        u = rename(u);
+        u = rename_unionall(u);
     jl_varbinding_t vb = { u->var, u->var->lb, u->var->ub, R, e->vars };
     JL_GC_PUSH2(&u, &vb.lb);
     e->vars = &vb;
@@ -191,8 +193,8 @@ static int subtype(jl_value_t *x, jl_value_t *y, jl_stenv_t *e)
     if (jl_is_typevar(x)) {
         if (jl_is_typevar(y)) {
             if (x == y) return 1;
-            jl_varbinding_t *xx = lookup(e, x);
-            jl_varbinding_t *yy = lookup(e, y);
+            jl_varbinding_t *xx = lookup(e, (jl_tvar_t*)x);
+            jl_varbinding_t *yy = lookup(e, (jl_tvar_t*)y);
             int xr = xx && xx->right;  // treat free variables as "forall" (left)
             int yr = yy && yy->right;
             if (xr) {
@@ -360,7 +362,7 @@ JL_DLLEXPORT int jl_isa(jl_value_t *x, jl_value_t *t)
             return 0;
         }
         JL_GC_PUSH1(&x);
-        x = jl_wrap_Type(x);
+        x = (jl_value_t*)jl_wrap_Type(x);
         int ans = jl_subtype(x, t);
         JL_GC_POP();
         return ans;
