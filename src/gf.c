@@ -117,7 +117,7 @@ static int8_t jl_cachearg_offset(jl_methtable_t *mt)
 
 /// ----- Insertion logic for special entries ----- ///
 
-JL_DLLEXPORT jl_lambda_info_t *jl_get_specialized(jl_method_t *m, jl_tupletype_t *types, jl_svec_t *sp);
+JL_DLLEXPORT jl_lambda_info_t *jl_get_specialized(jl_method_t *m, jl_value_t *types, jl_svec_t *sp);
 
 // get or create the LambdaInfo for a specialization
 JL_DLLEXPORT jl_lambda_info_t *jl_specializations_get_linfo(jl_method_t *m, jl_tupletype_t *type, jl_svec_t *sparams)
@@ -311,8 +311,9 @@ static int very_general_type(jl_value_t *t)
                    ((jl_tvar_t*)t)->ub==(jl_value_t*)jl_any_type)));
 }
 
-jl_value_t *jl_nth_slot_type(jl_tupletype_t *sig, size_t i)
+jl_value_t *jl_nth_slot_type(jl_value_t *sig, size_t i)
 {
+    sig = jl_unwrap_unionall(sig);
     size_t len = jl_field_count(sig);
     if (len == 0)
         return NULL;
@@ -826,7 +827,7 @@ static jl_lambda_info_t *jl_mt_assoc_by_type(jl_methtable_t *mt, jl_datatype_t *
     sig = join_tsig(tt, entry->sig);
     jl_lambda_info_t *nf;
     if (!cache) {
-        nf = jl_get_specialized(m, sig, env);
+        nf = jl_get_specialized(m, (jl_value_t*)sig, env);
     }
     else {
         nf = cache_method(mt, &mt->cache, (jl_value_t*)mt, sig, tt, entry, env);

@@ -223,14 +223,14 @@ static jl_array_t *jl_alloc_int_1d(size_t np, size_t len)
     else if (np < 0xFFFF) {
         static jl_value_t *int16 = NULL;
         if (int16 == NULL)
-            int16 = jl_apply_array_type(jl_uint16_type, 1);
+            int16 = jl_apply_array_type((jl_value_t*)jl_uint16_type, 1);
         ty = int16;
     }
     else {
         assert(np < 0x7FFFFFFF);
         static jl_value_t *int32 = NULL;
         if (int32 == NULL)
-            int32 = jl_apply_array_type(jl_uint32_type, 1);
+            int32 = jl_apply_array_type((jl_value_t*)jl_uint32_type, 1);
         ty = int32;
     }
     jl_array_t *a = jl_alloc_array_1d(ty, len);
@@ -330,7 +330,7 @@ static union jl_typemap_t *mtcache_hash_bp(struct jl_ordereddict_t *pa, jl_value
 {
     if (jl_is_datatype(ty)) {
         uintptr_t uid = ((jl_datatype_t*)ty)->uid;
-        if (!uid || is_kind(ty) || jl_has_typevars(ty))
+        if (!uid || is_kind(ty) || jl_has_free_typevars(ty))
             // be careful not to put non-leaf types or DataType/TypeConstructor in the cache here,
             // since they should have a lower priority and need to go into the sorted list
             return NULL;
@@ -535,7 +535,7 @@ int jl_typemap_intersection_visitor(union jl_typemap_t map, int offs,
         if (ty) {
             if (cache->targ.values != (void*)jl_nothing) {
                 jl_value_t *typetype = jl_is_type_type(ty) ? jl_tparam0(ty) : NULL;
-                if (typetype && !jl_has_typevars(typetype)) {
+                if (typetype && !jl_has_free_typevars(typetype)) {
                     if (is_cache_leaf(typetype)) {
                         // direct lookup of leaf types
                         union jl_typemap_t ml = mtcache_hash_lookup(&cache->targ, typetype, 1, offs);

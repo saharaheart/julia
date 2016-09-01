@@ -3653,6 +3653,7 @@ void jl_init_types(void)
         jl_new_bitstype((jl_value_t*)jl_symbol("Ptr"),
                         (jl_datatype_t*)jl_apply_type((jl_value_t*)jl_ref_type, jl_svec_data(tv), 1), tv,
                         sizeof(void*)*8)->name->wrapper;
+    jl_pointer_typename = ((jl_datatype_t*)jl_unwrap_unionall(jl_pointer_type))->name;
 
     // U T<:Tuple Type{T}
     tttvar = jl_new_typevar(jl_symbol("T"),
