@@ -75,7 +75,7 @@ static int sig_match_by_type_simple(jl_value_t **types, size_t n, jl_tupletype_t
                 return 0;
             }
         }
-        else if (decl == (jl_value_t*)jl_any_type) {
+        else if (decl == (jl_value_t*)jl_any_type || decl == jl_ANY_flag) {
         }
         else {
             if (jl_is_type_type(a)) // decl is not Type, because it would be caught above
@@ -85,7 +85,7 @@ static int sig_match_by_type_simple(jl_value_t **types, size_t n, jl_tupletype_t
         }
     }
     if (va) {
-        jl_value_t *decl = jl_field_type(sig, i);
+        jl_value_t *decl = jl_unwrap_unionall(jl_field_type(sig, i));
         if (jl_vararg_kind(decl) == JL_VARARG_INT) {
             if (n-i != jl_unbox_long(jl_tparam1(decl)))
                 return 0;
@@ -127,7 +127,7 @@ static inline int sig_match_simple(jl_value_t **args, size_t n, jl_value_t **sig
     for (i = 0; i < lensig; i++) {
         jl_value_t *decl = sig[i];
         jl_value_t *a = args[i];
-        if (decl == (jl_value_t*)jl_any_type) {
+        if (decl == (jl_value_t*)jl_any_type || decl == jl_ANY_flag) {
         }
         else if ((jl_value_t*)jl_typeof(a) == decl) {
             /*
@@ -161,7 +161,7 @@ static inline int sig_match_simple(jl_value_t **args, size_t n, jl_value_t **sig
             if (n-i != jl_unbox_long(jl_tparam1(decl)))
                 return 0;
         }
-        jl_value_t *t = jl_tparam0(decl);
+        jl_value_t *t = jl_unwrap_vararg(decl);
         for(; i < n; i++) {
             if (!jl_isa(args[i], t))
                 return 0;
@@ -525,12 +525,13 @@ int jl_typemap_intersection_visitor(union jl_typemap_t map, int offs,
     if (jl_typeof(map.unknown) == (jl_value_t*)jl_typemap_level_type) {
         jl_typemap_level_t *cache = map.node;
         jl_value_t *ty = NULL;
-        size_t l = jl_field_count(closure->type);
+        jl_value_t *ttypes = jl_unwrap_unionall(closure->type);
+        size_t l = jl_field_count(ttypes);
         if (closure->va && l <= offs + 1) {
             ty = closure->va;
         }
         else if (l > offs) {
-            ty = jl_tparam(closure->type, offs);
+            ty = jl_tparam(ttypes, offs);
         }
         if (ty) {
             if (cache->targ.values != (void*)jl_nothing) {
@@ -596,7 +597,7 @@ static jl_typemap_entry_t *jl_typemap_assoc_by_type_(jl_typemap_entry_t *ml, jl_
 {
     size_t n = jl_field_count(types);
     while (ml != (void*)jl_nothing) {
-        size_t lensig = jl_field_count(ml->sig);
+        size_t lensig = jl_field_count(jl_unwrap_unionall(ml->sig));
         if (lensig == n || (ml->va && lensig <= n+1)) {
             int resetenv = 0, ismatch = 1;
             if (ml->simplesig != (void*)jl_nothing) {
@@ -703,13 +704,14 @@ jl_typemap_entry_t *jl_typemap_assoc_by_type(union jl_typemap_t ml_or_cache, jl_
         jl_typemap_level_t *cache = ml_or_cache.node;
         // called object is the primary key for constructors, otherwise first argument
         jl_value_t *ty = NULL;
-        size_t l = jl_field_count(types);
+        jl_value_t *ttypes = jl_unwrap_unionall(types);
+        size_t l = jl_field_count(ttypes);
         int isva = 0;
         // compute the type at offset `offs` into `types`, which may be a Vararg
         if (l <= offs + 1) {
-            ty = jl_tparam(types, l - 1);
+            ty = jl_tparam(ttypes, l - 1);
             if (jl_is_vararg_type(ty)) {
-                ty = jl_tparam0(ty);
+                ty = jl_unwrap_vararg(ty);
                 isva = 1;
             }
             else if (l <= offs) {
@@ -717,7 +719,7 @@ jl_typemap_entry_t *jl_typemap_assoc_by_type(union jl_typemap_t ml_or_cache, jl_
             }
         }
         else if (l > offs) {
-            ty = jl_tparam(types, offs);
+            ty = jl_tparam(ttypes, offs);
         }
         // If there is a type at offs, look in the optimized caches
         if (!subtype) {
@@ -962,22 +964,23 @@ static int jl_typemap_array_insert_(struct jl_ordereddict_t *cache, jl_value_t *
 static void jl_typemap_level_insert_(jl_typemap_level_t *cache, jl_typemap_entry_t *newrec, int8_t offs,
                                      const struct jl_typemap_info *tparams)
 {
-    size_t l = jl_field_count(newrec->sig);
+    jl_value_t *ttypes = jl_unwrap_unionall(newrec->sig);
+    size_t l = jl_field_count(ttypes);
     // compute the type at offset `offs` into `sig`, which may be a Vararg
     jl_value_t *t1 = NULL;
     int isva = 0;
     if (l <= offs + 1) {
-        t1 = jl_tparam(newrec->sig, l - 1);
+        t1 = jl_tparam(ttypes, l - 1);
         if (jl_is_vararg_type(t1)) {
             isva = 1;
-            t1 = jl_tparam0(t1);
+            t1 = jl_unwrap_vararg(t1);
         }
         else if (l <= offs) {
             t1 = NULL;
         }
     }
     else if (l > offs) {
-        t1 = jl_tparam(newrec->sig, offs);
+        t1 = jl_tparam(ttypes, offs);
     }
     // If the type at `offs` is Any, put it in the Any list
     if (t1 && jl_is_any(t1))
@@ -1006,10 +1009,9 @@ jl_typemap_entry_t *jl_typemap_insert(union jl_typemap_t *cache, jl_value_t *par
                                       jl_value_t **overwritten)
 {
     jl_ptls_t ptls = jl_get_ptls_states();
-    assert(jl_is_tuple_type(type));
-    if (!simpletype) {
+    if (!simpletype)
         simpletype = (jl_tupletype_t*)jl_nothing;
-    }
+    jl_value_t *ttype = jl_unwrap_unionall(type);
 
     if ((jl_value_t*)simpletype == jl_nothing) {
         jl_typemap_entry_t *ml = jl_typemap_assoc_by_type(*cache, type, NULL, 1, 0, offs);
@@ -1025,7 +1027,7 @@ jl_typemap_entry_t *jl_typemap_insert(union jl_typemap_t *cache, jl_value_t *par
             jl_gc_wb(ml, ml->simplesig);
             ml->tvars = tvars;
             jl_gc_wb(ml, ml->tvars);
-            ml->va = jl_is_va_tuple(type);
+            ml->va = jl_is_va_tuple(ttype);
             // TODO: `l->func` or `l->func->roots` might need to be rooted
             ml->func.value = newvalue;
             if (newvalue)
@@ -1047,13 +1049,14 @@ jl_typemap_entry_t *jl_typemap_insert(union jl_typemap_t *cache, jl_value_t *par
     newrec->guardsigs = guardsigs;
     newrec->next = (jl_typemap_entry_t*)jl_nothing;
     // compute the complexity of this type signature
-    newrec->va = jl_is_va_tuple(type);
+    newrec->va = jl_is_va_tuple(ttype);
     newrec->issimplesig = (tvars == jl_emptysvec); // a TypeVar environment needs an complex matching test
     newrec->isleafsig = newrec->issimplesig && !newrec->va; // entirely leaf types don't need to be sorted
     JL_GC_PUSH1(&newrec);
+    assert(jl_is_tuple_type(ttype));
     size_t i, l;
-    for (i = 0, l = jl_field_count(type); i < l && newrec->issimplesig; i++) {
-        jl_value_t *decl = jl_field_type(type, i);
+    for (i = 0, l = jl_field_count(ttype); i < l && newrec->issimplesig; i++) {
+        jl_value_t *decl = jl_field_type(ttype, i);
         if (decl == (jl_value_t*)jl_datatype_type)
             newrec->isleafsig = 0; // Type{} may have a higher priority than DataType
         else if (decl == (jl_value_t*)jl_unionall_type)
@@ -1073,13 +1076,14 @@ jl_typemap_entry_t *jl_typemap_insert(union jl_typemap_t *cache, jl_value_t *par
     return newrec;
 }
 
-static int has_unions(jl_tupletype_t *type)
+static int has_unions(jl_value_t *type)
 {
+    type = jl_unwrap_unionall(type);
     int i;
     for (i = 0; i < jl_nparams(type); i++) {
         jl_value_t *t = jl_tparam(type, i);
         if (jl_is_uniontype(t) ||
-            (jl_is_vararg_type(t) && jl_is_uniontype(jl_tparam0(t))))
+            (jl_is_vararg_type(t) && jl_is_uniontype(jl_unwrap_vararg(t))))
             return 1;
     }
     return 0;
@@ -1130,8 +1134,7 @@ static void jl_typemap_list_insert_sorted(jl_typemap_entry_t **pml, jl_value_t *
             pnext = &item->next;
             next_parent = (jl_value_t*)item;
             while (l != newrec->next) {
-                if (jl_args_morespecific((jl_value_t*)item->sig,
-                                         (jl_value_t*)l->sig)) {
+                if (jl_args_morespecific((jl_value_t*)item->sig, (jl_value_t*)l->sig)) {
                     // reinsert item earlier in the list
                     *pitem = next;
                     jl_gc_wb(item_parent, next);

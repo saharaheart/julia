@@ -1142,7 +1142,7 @@ static std::string generate_func_sig(
         jl_value_t *tti = jl_svecref(tt,i);
         if (jl_is_vararg_type(tti)) {
             current_isVa = true;
-            tti = jl_tparam0(tti);
+            tti = jl_unwrap_vararg(tti);
         }
         Type *t = NULL;
         bool isboxed;

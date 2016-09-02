@@ -1563,6 +1563,7 @@ JL_DLLEXPORT size_t jl_static_show_func_sig(JL_STREAM *s, jl_value_t *type)
         n += jl_static_show(s, ftype);
         n += jl_printf(s, ")");
     }
+    type = jl_unwrap_unionall(type);
     size_t tl = jl_nparams(type);
     n += jl_printf(s, "(");
     size_t i;
@@ -1574,7 +1575,7 @@ JL_DLLEXPORT size_t jl_static_show_func_sig(JL_STREAM *s, jl_value_t *type)
         }
         else {
             if (jl_is_vararg_type(tp)) {
-                n += jl_static_show(s, jl_tparam0(tp));
+                n += jl_static_show(s, jl_unwrap_vararg(tp));
                 n += jl_printf(s, "...");
             }
             else {
