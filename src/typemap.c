@@ -360,7 +360,7 @@ static union jl_typemap_t *mtcache_hash_bp(struct jl_ordereddict_t *pa, jl_value
             }
             else {
                 assert(jl_typeof(pml->unknown) == (jl_value_t*)jl_typemap_entry_type);
-                t = jl_field_type(pml->leaf->sig, offs);
+                t = jl_field_type(jl_unwrap_unionall(pml->leaf->sig), offs);
                 if (tparam)
                     t = jl_tparam0(t);
             }

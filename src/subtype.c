@@ -159,7 +159,11 @@ static int subtype_unionall(jl_value_t *t, jl_unionall_t *u, jl_stenv_t *e, int8
         if (e->envidx < e->envsz) {
             jl_value_t *val;
             if (vb.lb == vb.ub)
-                val = vb.ub;
+                val = vb.lb;
+            else if (vb.lb != jl_bottom_type)
+                // TODO: for now return the least solution, which is what
+                // method parameters expect.
+                val = vb.lb;
             else if (vb.lb == u->var->lb && vb.ub == u->var->ub)
                 val = u->var;
             else
