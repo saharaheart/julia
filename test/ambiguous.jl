@@ -186,4 +186,12 @@ immutable T end
 end
 @test length(detect_ambiguities(Ambig7)) == 1
 
+module Ambig8
+using Base: DimsInteger, Indices
+g18307{T<:Integer}(::Union{Indices,Dims}, I::AbstractVector{T}...) = 1
+g18307(::DimsInteger) = 2
+g18307(::DimsInteger, I::Integer...) = 3
+end
+@test_broken @test_throws MethodError Ambig8.g18307((1,))
+
 nothing
